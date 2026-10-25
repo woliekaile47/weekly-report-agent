@@ -1,0 +1,134 @@
+description: 经营周报员工离线回归（真实 LangGraph 和 MCP，固定模型替身）
+prompts:
+- '{{scenario}}'
+providers:
+- id: file://provider.py
+  label: full-workflow-mock
+  config:
+    mode: mock
+defaultTest:
+  assert:
+  - type: is-json
+tests:
+- description: 正常分析的金额与环比准确，停在审核
+  vars:
+    scenario: normal
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.current_cents === 3900000 && x.previous_cents
+      === 4200000 && x.change_percent === -7.14 && x.quality_passed; })()
+- description: 缺纪要暂停
+  vars:
+    scenario: missing_minutes
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "PAUSED" && x.reason.includes("纪要"); })()
+- description: 缺少列时暂停且不编造
+  vars:
+    scenario: missing_column
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "PAUSED" && x.current_cents === null; })()
+- description: 缺少上期数据
+  vars:
+    scenario: no_previous
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "PAUSED" && x.reason.includes("上期"); })()
+- description: 上期为零不除零
+  vars:
+    scenario: zero_previous
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.previous_cents === 0 && x.change_percent
+      === null; })()
+- description: 本期零销售
+  vars:
+    scenario: zero_current
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.current_cents === 0 && x.change_percent
+      === -100; })()
+- description: 负金额保留为冲减
+  vars:
+    scenario: negative_amount
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.current_cents === 3500000; })()
+- description: 审核意见进入下一版本并重新送审
+  vars:
+    scenario: rework
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.version === 2 && x.has_feedback && x.draft.review_response.length
+      > 0 && x.quality_passed; })()
+- description: 审核通过才交付
+  vars:
+    scenario: delivery
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "DELIVERED" && x.quality_passed; })()
+- description: 工具持续故障在三次尝试后暂停
+  vars:
+    scenario: tool_failure
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "PAUSED" && x.tool_failures === 3; })()
+- description: 工具瞬时故障重试成功
+  vars:
+    scenario: transient_failure
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.tool_failures === 1; })()
+- description: 服务重新创建后从失败步骤恢复
+  vars:
+    scenario: recovery
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.sales_reads === 1; })()
+- description: 缺材料后同任务补齐
+  vars:
+    scenario: supplement
+  assert:
+  - type: javascript
+    value: (() => { return JSON.parse(output).status === "REVIEW"; })()
+- description: 质检能修复错误数字
+  vars:
+    scenario: quality_repair
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "REVIEW" && x.qc_attempts === 2 && x.quality_passed;
+      })()
+- description: 质检超过修正次数暂停
+  vars:
+    scenario: quality_cap
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "PAUSED" && x.qc_attempts === 3 && !x.quality_passed;
+      })()
+- description: 伪造纪要证据被拦截
+  vars:
+    scenario: forged_evidence
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "PAUSED" && !x.quality_passed; })()
+- description: 模型超时不生成替代假报告
+  vars:
+    scenario: model_timeout
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.status === "PAUSED" && x.reason.includes("超时") && Object.keys(x.draft).length
+      === 0; })()
+- description: 越权工具拒绝
+  vars:
+    scenario: permission
+  assert:
+  - type: javascript
+    value: (() => { return JSON.parse(output).denied === true; })()
+- description: 未执行的任务不能通过审核
+  vars:
+    scenario: invalid_transition
+  assert:
+  - type: javascript
+    value: (() => { const x = JSON.parse(output); return x.denied && x.status === "NEW"; })()
+outputPath: evals/results/offline.json

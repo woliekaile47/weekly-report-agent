@@ -1,0 +1,12 @@
+{
+  "name": "weekly-report-evals",
+  "private": true,
+  "scripts": {
+    "eval": "promptfoo eval -c evals/promptfooconfig.yaml --no-cache --max-concurrency 1",
+    "eval:live": "promptfoo eval -c evals/promptfooconfig.live.yaml --no-cache --max-concurrency 1",
+    "eval:view": "promptfoo view"
+  },
+  "devDependencies": {
+    "promptfoo": "0.125.1"
+  }
+}

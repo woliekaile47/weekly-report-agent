@@ -1,0 +1,28 @@
+skill: skills/weekly-report
+allowed_tools:
+  - read_sales
+  - read_minutes
+  - compute_metrics
+  - render_charts
+  - build_report
+  - inspect_report
+limits:
+  model_calls: 12
+  model_retries: 2
+  model_timeout_seconds: 60
+  active_seconds: 600
+  tool_timeout_seconds: 60
+  tool_retries: 2
+  qc_repairs: 2
+quality:
+  min_characters: 200
+  max_characters: 12000
+  anomaly_percent: 20
+  required_sections: [经营概览, 指标汇总, 异常与原因, 行动建议, 数据与证据说明]
+  forbidden_words: [保证盈利, 内部绝密]
+column_aliases:
+  date: [date, 日期, 销售日期]
+  store: [store, 门店, 门店名称]
+  region: [region, 区域, 大区]
+  category: [category, 品类, 商品品类]
+  amount: [amount, 销售额, 销售金额]

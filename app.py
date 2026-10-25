@@ -9,6 +9,7 @@ from weekly_report.schemas import Review, TaskSpec
 from weekly_report.service import EmployeeService
 from weekly_report.settings import ROOT, Settings
 from weekly_report.store import task_path
+from weekly_report.ui_chinese import STATUS, event_rows, friendly_error, localize_widgets, translate_details
 
 st.set_page_config(page_title="经营周报员工", page_icon="📊", layout="wide")
 st.markdown(
@@ -20,15 +21,7 @@ h1,h2,h3 { color: #194e61; }
     unsafe_allow_html=True,
 )
 
-STATUS = {
-    "NEW": "待执行",
-    "RUNNING": "执行中 / 可恢复",
-    "PAUSED": "已暂停",
-    "REVIEW": "等待审核",
-    "REWORK": "修改中 / 可恢复",
-    "APPROVED": "审核通过 / 待交付",
-    "DELIVERED": "已交付",
-}
+localize_widgets()
 
 with st.sidebar:
     st.title("经营周报员工")
@@ -47,6 +40,7 @@ with st.sidebar:
     selected = st.selectbox(
         "历史任务",
         [None] + [t["id"] for t in tasks],
+        placeholder="选择任务",
         format_func=lambda x: (
             "选择任务" if x is None else next(f"{t['title']} · {x[:6]}" for t in tasks if t["id"] == x)
         ),
@@ -62,7 +56,7 @@ def action(function, *args, **kwargs):
             result = function(*args, **kwargs)
         return result
     except Exception as exc:
-        st.error(str(exc))
+        st.error(friendly_error(exc))
         return None
 
 
@@ -76,8 +70,8 @@ if "task_id" not in st.session_state:
         end = right.date_input("结束日期", date(2026, 11, 1))
         compare = st.checkbox("需要与前一个同长度周期比较", True)
         focus = st.text_area("重点关注", "说明华东区下滑原因，结合周会纪要给出行动建议。")
-        sales = st.file_uploader("销售明细", type=["xlsx", "csv"])
-        minutes = st.file_uploader("周会纪要", type=["docx", "md", "txt"])
+        sales = st.file_uploader("销售明细", type=["xlsx", "csv"], max_upload_size=20)
+        minutes = st.file_uploader("周会纪要", type=["docx", "md", "txt"], max_upload_size=20)
         sample = st.checkbox("使用项目自带的模拟样例数据", False)
         st.caption("销售列：日期、门店、区域、品类、销售额。需要环比时，请在同一文件中包含上期数据。")
         submitted = st.form_submit_button("创建并执行", type="primary")
@@ -101,7 +95,7 @@ if "task_id" not in st.session_state:
             action(service.run, task_id)
             st.rerun()
         except Exception as exc:
-            st.error(str(exc))
+            st.error(friendly_error(exc))
     st.stop()
 
 task_id = st.session_state.task_id
@@ -121,8 +115,8 @@ if state["status"] == "PAUSED":
     st.warning(state["reason"])
     with st.form("resume"):
         st.write("可补充或替换材料后继续；服务故障解除后也可直接重试。")
-        new_sales = st.file_uploader("补充销售数据", type=["csv", "xlsx"])
-        new_minutes = st.file_uploader("补充周会纪要", type=["docx", "txt", "md"])
+        new_sales = st.file_uploader("补充销售数据", type=["csv", "xlsx"], max_upload_size=20)
+        new_minutes = st.file_uploader("补充周会纪要", type=["docx", "txt", "md"], max_upload_size=20)
         if st.form_submit_button("恢复执行", type="primary"):
             files = {
                 key: (value.name, value.getvalue())
@@ -161,7 +155,7 @@ with report_tab:
         path = task_path(service.settings.data_dir, task_id, state["report_file"])
         if path.exists():
             st.download_button(
-                "下载 Word 供审核" if state["status"] != "DELIVERED" else "下载经营周报 Word",
+                "下载周报文档供审核" if state["status"] != "DELIVERED" else "下载经营周报文档",
                 path.read_bytes(),
                 f"经营周报-v{state['version']}.docx",
             )
@@ -185,7 +179,7 @@ with report_tab:
                     if action(service.review, task_id, review):
                         st.rerun()
                 except Exception as exc:
-                    st.error(str(exc))
+                    st.error(friendly_error(exc))
     if state["status"] == "DELIVERED":
         st.success("当前版本已通过审核，周报、质检记录和审核记录已打包。")
         package = task_path(service.settings.data_dir, task_id, state["delivery"])
@@ -195,6 +189,17 @@ with report_tab:
 with quality_tab:
     for item in state.get("quality_history", []):
         st.write(f"版本 {item['version']} · {'通过' if item['passed'] else '未通过'}")
-        st.dataframe(item["checks"], use_container_width=True, hide_index=True)
+        st.table(
+            [
+                {
+                    "检查项": check["name"],
+                    "结果": "通过" if check["passed"] else "未通过",
+                    "说明": translate_details(check["details"]),
+                }
+                for check in item["checks"]
+            ]
+        )
+    if not state.get("quality_history"):
+        st.info("尚无质检记录，周报生成后会显示检查结果。")
 with events_tab:
-    st.dataframe(service.store.events(task_id), use_container_width=True, hide_index=True)
+    st.table(event_rows(service.store.events(task_id)))

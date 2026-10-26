@@ -8,24 +8,38 @@ import io
 import json
 import uuid
 from contextlib import nullcontext
+from importlib.util import module_from_spec, spec_from_file_location
 from unittest.mock import patch
 
 from weekly_report.mcp_client import MCPGateway
-from weekly_report.model import mock_draft
 from weekly_report.schemas import EmployeeError, Review, TaskSpec
 from weekly_report.service import EmployeeService
 from weekly_report.settings import ROOT, Settings
 
+# Test helpers are intentionally excluded from the installed application package.
+# Promptfoo launches outside the project import path, so load the helper explicitly.
+fixture_spec = spec_from_file_location("evaluation_fakes", ROOT / "tests/fakes.py")
+fixture_module = module_from_spec(fixture_spec)
+fixture_spec.loader.exec_module(fixture_module)
+fake_generate, mock_draft = fixture_module.fake_generate, fixture_module.mock_draft
+
 
 def call_api(prompt, options, context):
+    mode = options.get("config", {}).get("mode", "live")
+    fixture = patch("weekly_report.graph.generate", fake_generate) if mode == "mock" else nullcontext()
+    with fixture:
+        return evaluate_case(prompt, options, context)
+
+
+def evaluate_case(prompt, options, context):
     scenario = context.get("vars", {}).get("scenario", str(prompt).strip())
-    mode = options.get("config", {}).get("mode", "mock")
-    settings = Settings(data_dir=ROOT / "runtime/evals" / uuid.uuid4().hex, mode=mode)
+    mode = options.get("config", {}).get("mode", "live")
+    settings = Settings(data_dir=ROOT / "runtime/evals" / uuid.uuid4().hex)
     service = EmployeeService(settings)
     spec = TaskSpec(title="测评经营周报", start_date="2026-10-26", end_date="2026-11-01")
     files = {
-        "sales": ("sales.csv", (ROOT / "samples/sales.csv").read_bytes()),
-        "minutes": ("minutes.md", (ROOT / "samples/minutes.md").read_bytes()),
+        "sales": ("sales.csv", (ROOT / "tests/fixtures/sales.csv").read_bytes()),
+        "minutes": ("minutes.md", (ROOT / "tests/fixtures/minutes.md").read_bytes()),
     }
     original = dict(files)
     if scenario == "missing_minutes":

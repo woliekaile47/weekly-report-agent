@@ -15,7 +15,6 @@ ROOT = Path(__file__).resolve().parents[1]
 class Settings:
     root: Path = ROOT
     data_dir: Path | None = None
-    mode: str | None = None
 
     def __post_init__(self):
         load_dotenv(self.root / ".env", override=False)
@@ -24,9 +23,10 @@ class Settings:
             self.data_dir = self.root / self.data_dir
         self.data_dir = self.data_dir.resolve()
         self.data_dir.mkdir(parents=True, exist_ok=True)
-        self.mode = self.mode or os.getenv("LLM_MODE", "live")
-        if self.mode not in {"live", "mock"}:
-            raise ValueError("LLM_MODE 必须为 live 或 mock")
+
+    @property
+    def mode(self):
+        return "live"
 
     def employee(self) -> dict:
         config = yaml.safe_load((self.root / "config/employee.yaml").read_text(encoding="utf-8"))

@@ -25,7 +25,6 @@ Copy-Item .env.example .env   # 仅在尚无 .env 时执行
 LLM_BASE_URL=https://apihub.agnes-ai.com/v1
 LLM_MODEL=agnes-3.0-flash
 LLM_API_KEY=填写自己的密钥
-LLM_MODE=live
 DATA_DIR=runtime
 ```
 
@@ -33,27 +32,27 @@ DATA_DIR=runtime
 
 Linux/macOS 可使用 Python 3.12 创建 `.venv` 并安装依赖，然后执行 `.venv/bin/python -m streamlit run app.py --server.address 127.0.0.1`。图表需要可用的中文字体，如 Noto Sans CJK SC。当前主要验证环境为 Windows。
 
-## 第一次演示
+## 创建实际业务任务
 
-1. 新建任务，统计周期选择 **2026-10-26 至 2026-11-01**。
-2. 勾选“使用项目自带的模拟样例数据”。真实模型模式会调用 Agnes；离线演示使用固定模型替身。
+1. 新建任务，选择与实际资料对应的统计周期（页面默认上一个完整自然周）。
+2. 上传自己的销售 Excel/CSV 和周会纪要，并填写重点关注的问题。应用只调用 Agnes 模型，不提供模拟样例或离线生成入口。
 3. 执行后查看指标、图表、纪要引用、Word 文件与质检记录。
-4. 填写审核人，选择“退回修改”，输入“华东区下滑原因没说清楚，请结合周会纪要补充”。
+4. 填写审核人；需要修改时选择“退回修改”，写明对应问题与修改要求。
 5. 查看第二版修改说明及新的质检结果。通过当前版本后下载完整交付包。
 
-无网络演示：`powershell -ExecutionPolicy Bypass -File .\start.ps1 -Mock`。
+缺少材料时任务暂停并提示补充；模型或网络故障时有限重试后暂停，不生成替代报告。历史开发样例已从业务列表归档，原文件仅保留供追溯；已有实际业务任务不受影响。
 
 命令行也支持恢复与审核：
 
 ```powershell
-.\.venv\Scripts\python.exe -m weekly_report.cli --mode live demo
+.\.venv\Scripts\python.exe -m weekly_report.cli create --title "门店经营周报" --start <开始日期> --end <结束日期> --sales <销售文件路径> --minutes <纪要文件路径>
 .\.venv\Scripts\python.exe -m weekly_report.cli state <任务ID>
 .\.venv\Scripts\python.exe -m weekly_report.cli review <任务ID> reject --version 1 --reviewer 张三 --feedback "请补充华东区原因"
 .\.venv\Scripts\python.exe -m weekly_report.cli review <任务ID> approve --version 2 --reviewer 张三
-.\.venv\Scripts\python.exe -m weekly_report.cli resume <任务ID>
+.\.venv\Scripts\python.exe -m weekly_report.cli resume <任务ID> --sales <补充销售文件路径> --minutes <补充纪要文件路径>
 ```
 
-命令行 `--mode mock demo --approve` 仅用于自动化演示模拟审核，不适用于真实模型任务。
+命令行同样必须显式审核当前版本，不提供自动审核或演示命令。恢复时可以省略无需替换的附件参数。
 
 ## 输入约定
 
@@ -73,15 +72,16 @@ weekly_report/
   mcp_server.py              官方 SDK 实现的六个工具
   mcp_client.py              MCP 会话、工具白名单、重试与缓存
   analysis.py                数据读取与确定性指标计算
-  model.py                   Agnes 接入与明确标记的离线替身
+  model.py                   Agnes 真实模型接入
   report.py                  图表、Word 和自动质检
   store.py                   SQLite 审计、缓存、路径校验
 config/employee.yaml         工具许可、限制、质检与字段映射
 skills/weekly-report/        Agent Skills 岗位配置与参考资料
-samples/                    自造模拟输入，不是企业官方公开用例
 tests/                      程序、故障恢复与界面测试
+  fixtures/                 仅供测试使用的虚构资料，不提供给业务界面
+  fakes.py                  仅供测试注入的模型替身，业务应用不导入
 evals/                      promptfoo 工作流测评与真实模型测评
-docs/                       架构、技术报告、验证与演示说明
+docs/                       架构、技术报告、验证与业务验收说明
 runtime/                    本地状态、输入与交付文件，不入 Git
 ```
 
@@ -111,7 +111,7 @@ powershell -ExecutionPolicy Bypass -File .\eval.ps1
 powershell -ExecutionPolicy Bypass -File .\eval.ps1 -Live
 ```
 
-离线测评运行真实 LangGraph、SQLite、MCP 子进程、图表与 Word 工具，只替换模型输出。真实测评调用 `agnes-3.0-flash`，覆盖正常分析、审核退回和纪要指令干扰。测试过程中的审核决定由测试驱动模拟，真实应用不会自动审批。结果写入 `evals/results/`；运行 `npm run eval:view` 可查看 promptfoo 结果。
+离线测评只在独立测试目录运行真实 LangGraph、SQLite、MCP 子进程、图表与 Word 工具，通过测试代码替换模型输出；产品本身不含离线模式。真实测评调用 `agnes-3.0-flash`，覆盖正常分析、审核退回和纪要指令干扰。测试过程中的审核决定由测试驱动模拟，业务应用不会自动审批。测评使用 tests/fixtures 中的虚构资料，不能作为实际经营结论。结果写入 `evals/results/`；运行 `npm run eval:view` 可查看 promptfoo 结果。
 
 ## 断点恢复与交付
 
@@ -121,7 +121,7 @@ powershell -ExecutionPolicy Bypass -File .\eval.ps1 -Live
 
 ## 范围与限制
 
-这是本地单用户竞赛演示版，绑定回环地址；审核人姓名用于记录，尚未接企业登录与权限系统。运行数据包含业务材料，保存在本地 `runtime/`。不提供生产多租户、定时调度或在线协作。
+当前为本地单用户应用，绑定回环地址；审核人姓名用于记录，尚未接企业登录与权限系统。运行数据包含业务材料，保存在本地 `runtime/`。不提供生产多租户、定时调度或在线协作。
 
 免费模型服务可能限流或不可用，程序按限制重试后暂停。硬退出时已完成检查点和模型请求次数能恢复；中断中的调用无法保证只执行一次，也无法完整还原其活动耗时。模型对原因的业务理解和建议质量仍需人工复核。
 

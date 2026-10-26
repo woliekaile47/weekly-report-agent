@@ -38,6 +38,9 @@ class Store:
                 CREATE TABLE IF NOT EXISTS tool_cache (
                     key TEXT PRIMARY KEY, result TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS archived_tasks (
+                    task_id TEXT PRIMARY KEY, reason TEXT NOT NULL
+                );
             """)
 
     def connect(self):
@@ -61,8 +64,26 @@ class Store:
 
     def tasks(self):
         with self.connect() as db:
-            rows = db.execute("SELECT id, created, initial FROM tasks ORDER BY created DESC").fetchall()
-        return [{"id": i, "created": c, "title": json.loads(s)["spec"]["title"]} for i, c, s in rows]
+            rows = db.execute(
+                "SELECT id, created, initial FROM tasks WHERE id NOT IN "
+                "(SELECT task_id FROM archived_tasks) ORDER BY created DESC"
+            ).fetchall()
+        return [
+            {"id": i, "created": c, "title": json.loads(s)["spec"]["title"]}
+            for i, c, s in rows
+            if json.loads(s).get("mode") == "live"
+        ]
+
+    def archive(self, task_id, reason):
+        self.initial(task_id)
+        with self.connect() as db:
+            db.execute("INSERT OR REPLACE INTO archived_tasks VALUES(?,?)", (task_id, reason))
+
+    def is_archived(self, task_id):
+        with self.connect() as db:
+            return (
+                db.execute("SELECT 1 FROM archived_tasks WHERE task_id=?", (task_id,)).fetchone() is not None
+            )
 
     def event(self, task_id, kind, payload, key=None):
         with self.connect() as db:

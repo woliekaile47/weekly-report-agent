@@ -40,7 +40,7 @@ def test_invalid_amount_is_not_silently_zero(tmp_path, service, amount):
 def test_excel_and_csv_equivalence(tmp_path, service):
     import pandas as pd
 
-    source = ROOT / "samples/sales.csv"
+    source = ROOT / "tests/fixtures/sales.csv"
     target = tmp_path / "sales.xlsx"
     pd.read_csv(source).to_excel(target, index=False)
     aliases = service.settings.employee()["column_aliases"]

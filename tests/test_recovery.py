@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from weekly_report.model import mock_draft
+from tests.fakes import mock_draft
 from weekly_report.service import EmployeeService
 from weekly_report.store import task_path
 
@@ -18,7 +18,7 @@ from weekly_report.settings import Settings
 async def crash(settings, state):
     os._exit(93)
 graph.generate = crash
-service = EmployeeService(Settings(data_dir=sys.argv[1], mode='mock'))
+service = EmployeeService(Settings(data_dir=sys.argv[1]))
 service.run(sys.argv[2])
 """
     result = subprocess.run(

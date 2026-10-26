@@ -133,7 +133,7 @@ class MCPGateway:
                 if fault:
                     if isinstance(fault, int) and fault > 0:
                         self.faults[name] -= 1
-                    raise EmployeeError("演示注入：工具暂时不可用")
+                    raise EmployeeError("测试注入：工具暂时不可用")
                 await self.connect()
                 future = asyncio.get_running_loop().create_future()
                 await self.queue.put((name, arguments, future))

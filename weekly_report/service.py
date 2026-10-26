@@ -86,10 +86,9 @@ class EmployeeService:
 
     async def _operate(self, task_id, action, files=None, review=None):
         initial = self.store.initial(task_id)
-        # Mode is pinned to the task; never silently replace a live model with fixtures.
-        task_settings = Settings(
-            root=self.settings.root, data_dir=self.settings.data_dir, mode=initial["mode"]
-        )
+        if initial.get("mode") != "live" or self.store.is_archived(task_id):
+            raise EmployeeError("该历史演示任务已停用，请上传真实资料创建新任务", "transition")
+        task_settings = Settings(root=self.settings.root, data_dir=self.settings.data_dir)
         async with AsyncSqliteSaver.from_conn_string(
             str(self.settings.data_dir / "checkpoints.sqlite")
         ) as saver:

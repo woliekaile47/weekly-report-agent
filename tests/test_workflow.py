@@ -95,7 +95,7 @@ def test_tools_reject_unauthorized_calls(service, spec):
 
 
 def test_quality_repair_cap(service, spec, files, monkeypatch):
-    from weekly_report.model import mock_draft
+    from tests.fakes import mock_draft
 
     async def bad_model(settings, state):
         result = mock_draft(state)

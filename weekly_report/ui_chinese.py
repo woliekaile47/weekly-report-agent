@@ -103,7 +103,7 @@ def readable(value, key=""):
     if key in {"tool", "step"}:
         return TOOLS.get(value, "未开放的工具")
     if key == "mode":
-        return "真实模型" if value == "live" else "离线演示"
+        return "真实模型" if value == "live" else "已停用的历史模式"
     if key == "decision":
         return "通过" if value == "approve" else "退回修改"
     if key == "inputs_replaced":

@@ -17,7 +17,7 @@ def test_valid_source_id_in_prose_and_invalid_source_rejected(service, spec, fil
         state["minutes"],
         state["draft"],
         1,
-        "mock",
+        "live",
         [],
     )
     check = inspect(

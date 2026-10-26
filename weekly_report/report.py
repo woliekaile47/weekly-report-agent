@@ -66,6 +66,8 @@ def build_document(
     feedback: list,
 ):
     content = Draft.model_validate(draft)
+    if mode != "live":
+        raise ValueError("仅支持真实模型生成的报告")
     doc = Document()
     sec = doc.sections[0]
     sec.page_width, sec.page_height = Cm(21), Cm(29.7)
@@ -85,9 +87,7 @@ def build_document(
         doc.styles[heading].font.color.rgb = RGBColor.from_string("194E61")
     doc.add_heading("经营周报", 0)
     doc.add_paragraph(spec["title"])
-    doc.add_paragraph(
-        f"{metrics['period']}　|　版本 {version}　|　{'离线模拟数据演示' if mode == 'mock' else 'Agnes AI 辅助分析'}"
-    )
+    doc.add_paragraph(f"{metrics['period']}　|　版本 {version}　|　Agnes AI 辅助分析")
     doc.add_heading("经营概览", 1)
     doc.add_paragraph(substitute(content.summary, metrics["tokens"]))
     doc.add_heading("指标汇总", 1)

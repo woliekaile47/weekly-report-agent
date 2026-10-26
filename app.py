@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import streamlit as st
 
 from weekly_report.report import substitute
 from weekly_report.schemas import Review, TaskSpec
 from weekly_report.service import EmployeeService
-from weekly_report.settings import ROOT, Settings
+from weekly_report.settings import Settings
 from weekly_report.store import task_path
 from weekly_report.ui_chinese import STATUS, event_rows, friendly_error, localize_widgets, translate_details
 
@@ -26,17 +27,14 @@ localize_widgets()
 with st.sidebar:
     st.title("经营周报员工")
     st.caption("分析有依据 · 修改可追溯")
-    mode = st.radio(
-        "新任务使用",
-        ["真实模型", "离线演示"],
-        index=0 if Settings().mode == "live" else 1,
-        help="离线演示使用固定分析模板，用于流程验证。",
-    )
-    service = EmployeeService(Settings(mode="live" if mode == "真实模型" else "mock"))
+    service = EmployeeService(Settings())
+    st.caption("使用 Agnes 模型分析上传的业务资料")
     st.divider()
     if st.button("新建任务", use_container_width=True):
         st.session_state.pop("task_id", None)
     tasks = service.store.tasks()
+    if st.session_state.get("task_id") not in {task["id"] for task in tasks}:
+        st.session_state.pop("task_id", None)
     selected = st.selectbox(
         "历史任务",
         [None] + [t["id"] for t in tasks],
@@ -47,7 +45,7 @@ with st.sidebar:
     )
     if st.button("打开任务", disabled=selected is None, use_container_width=True):
         st.session_state.task_id = selected
-    st.caption("本地单用户演示版。审核姓名用于留痕，不提供企业身份认证。")
+    st.caption("本地单用户应用。审核姓名用于留痕，不提供企业身份认证。")
 
 
 def action(function, *args, **kwargs):
@@ -66,13 +64,14 @@ if "task_id" not in st.session_state:
     with st.form("new_task"):
         title = st.text_input("任务名称", "门店经营周报")
         left, right = st.columns(2)
-        start = left.date_input("开始日期", date(2026, 10, 26))
-        end = right.date_input("结束日期", date(2026, 11, 1))
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        last_week_end = today - timedelta(days=today.weekday() + 1)
+        start = left.date_input("开始日期", last_week_end - timedelta(days=6))
+        end = right.date_input("结束日期", last_week_end)
         compare = st.checkbox("需要与前一个同长度周期比较", True)
-        focus = st.text_area("重点关注", "说明华东区下滑原因，结合周会纪要给出行动建议。")
+        focus = st.text_area("重点关注", placeholder="填写本次经营分析需要重点关注的问题")
         sales = st.file_uploader("销售明细", type=["xlsx", "csv"], max_upload_size=20)
         minutes = st.file_uploader("周会纪要", type=["docx", "md", "txt"], max_upload_size=20)
-        sample = st.checkbox("使用项目自带的模拟样例数据", False)
         st.caption("销售列：日期、门店、区域、品类、销售额。需要环比时，请在同一文件中包含上期数据。")
         submitted = st.form_submit_button("创建并执行", type="primary")
     if submitted:
@@ -81,15 +80,9 @@ if "task_id" not in st.session_state:
                 title=title, start_date=start, end_date=end, require_comparison=compare, focus=focus
             )
             files = {}
-            if sample:
-                files = {
-                    "sales": ("sales.csv", (ROOT / "samples/sales.csv").read_bytes()),
-                    "minutes": ("minutes.md", (ROOT / "samples/minutes.md").read_bytes()),
-                }
-            else:
-                for key, file in [("sales", sales), ("minutes", minutes)]:
-                    if file:
-                        files[key] = (file.name, file.getvalue())
+            for key, file in [("sales", sales), ("minutes", minutes)]:
+                if file:
+                    files[key] = (file.name, file.getvalue())
             task_id = service.create(spec, files)
             st.session_state.task_id = task_id
             action(service.run, task_id)
@@ -106,10 +99,8 @@ st.caption(
 )
 cols = st.columns(3)
 cols[0].metric("任务状态", STATUS.get(state["status"], state["status"]))
-cols[1].metric("分析模式", "真实模型" if state["mode"] == "live" else "离线模拟")
+cols[1].metric("分析模型", service.settings.model)
 cols[2].metric("本轮模型调用", state.get("model_calls", 0))
-if state["mode"] == "mock":
-    st.info("这是一项离线演示任务，文字来自固定模板，不代表真实模型的分析效果。")
 
 if state["status"] == "PAUSED":
     st.warning(state["reason"])

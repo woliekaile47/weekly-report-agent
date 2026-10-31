@@ -1,4 +1,4 @@
---- upstream/frontend/src/hooks/useRunStream.ts
+--- invoice/frontend/src/hooks/useRunStream.ts
 +++ adapted/frontend/src/hooks/useRunStream.ts
 @@ -1,7 +1,15 @@
 +// Adapted from invoice assistant a0a0fc5, MIT. Persistent replay and Chinese errors added.

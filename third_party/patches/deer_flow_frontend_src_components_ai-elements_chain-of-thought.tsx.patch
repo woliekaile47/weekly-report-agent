@@ -1,0 +1,7 @@
+--- deer-flow/frontend/src/components/ai-elements/chain-of-thought.tsx
++++ adapted/frontend/src/components/ai-elements/chain-of-thought.tsx
+@@ -1,3 +1,4 @@
++// DeerFlow e0f5483, MIT.
+ "use client";
+ 
+ import { useControllableState } from "@radix-ui/react-use-controllable-state";

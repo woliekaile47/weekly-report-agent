@@ -1,0 +1,40 @@
+--- deer-flow/frontend/src/hooks/use-mobile.ts
++++ adapted/frontend/src/hooks/use-mobile.ts
+@@ -1,22 +1,24 @@
++// DeerFlow e0f5483, MIT.
+ import * as React from "react";
+ 
+ const MOBILE_BREAKPOINT = 768;
+-const MOBILE_QUERY = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
+-
+-function subscribe(callback: () => void) {
+-  const mql = window.matchMedia(MOBILE_QUERY);
+-  mql.addEventListener("change", callback);
+-  return () => mql.removeEventListener("change", callback);
+-}
+-
+-function getSnapshot() {
+-  return window.matchMedia(MOBILE_QUERY).matches;
+-}
+-
+ function getServerSnapshot() {
+   return false;
+ }
+ 
+-export function useIsMobile() {
++export function useIsMobile(breakpoint = MOBILE_BREAKPOINT) {
++  const query = `(max-width: ${breakpoint - 1}px)`;
++  const subscribe = React.useCallback(
++    (callback: () => void) => {
++      const mql = window.matchMedia(query);
++      mql.addEventListener("change", callback);
++      return () => mql.removeEventListener("change", callback);
++    },
++    [query],
++  );
++  const getSnapshot = React.useCallback(
++    () => window.matchMedia(query).matches,
++    [query],
++  );
+   return React.useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+ }

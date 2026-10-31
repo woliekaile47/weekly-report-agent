@@ -90,7 +90,7 @@ export interface StateSnapshot {
     }[];
     anomalies: Metric[];
   };
-  minutes?: { sources: Evidence[] };
+  minutes?: { week?: number; sources: { id: string; text: string }[] };
   draft?: Draft;
   feedback?: { reviewer: string; feedback: string; version: number }[];
   quality?: {
@@ -109,4 +109,19 @@ export interface RunSummary {
   title: string;
   status: RunStatus;
   week: number;
+}
+
+export interface TaskFile {
+  id: string;
+  name: string;
+  bytes: number;
+  kind: "input" | "artifact";
+  url: string;
+}
+
+export interface TaskEvent {
+  seq: number;
+  time: string;
+  kind: string;
+  payload: Record<string, unknown>;
 }

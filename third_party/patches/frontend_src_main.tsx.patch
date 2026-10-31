@@ -1,4 +1,4 @@
---- upstream/frontend/src/main.tsx
+--- invoice/frontend/src/main.tsx
 +++ adapted/frontend/src/main.tsx
 @@ -4,6 +4,7 @@
  import { BrowserRouter } from "react-router-dom";

@@ -34,6 +34,7 @@ heading = ParagraphStyle(
 )
 title = ParagraphStyle("Title", parent=normal, fontSize=24, leading=32, spaceAfter=20)
 small = ParagraphStyle("Small", parent=normal, fontSize=8, leading=12, spaceAfter=4)
+evidence = ParagraphStyle("Evidence", parent=normal, fontSize=9, leading=14, spaceAfter=6)
 
 
 def p(text, style=normal):
@@ -120,7 +121,12 @@ def main():
         if i == 4:
             verification = ROOT / "docs/verification.md"
             if verification.exists():
-                story.extend(blocks(verification.read_text(encoding="utf-8")[:1500]))
+                paragraphs = verification.read_text(encoding="utf-8").split("\n\n")
+                story.append(p("验证摘要", heading))
+                for prefix in ("工程验证：", "真实模型：", "界面验证（本轮）："):
+                    paragraph = next((item for item in paragraphs if item.startswith(prefix)), "")
+                    if paragraph:
+                        story.append(p(paragraph, evidence))
     target = ROOT / "docs/技术报告.pdf"
 
     def footer(canvas, doc):

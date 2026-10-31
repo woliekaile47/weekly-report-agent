@@ -1,0 +1,351 @@
+--- deer-flow/frontend/src/components/workspace/workspace-sidebar.tsx
++++ adapted/frontend/src/components/workspace/workspace-sidebar.tsx
+@@ -1,67 +1,293 @@
+-"use client";
+-
+-import {
+-  type Sidebar,
++// Adapted from DeerFlow workspace-sidebar/header/nav-menu/recent-chat-list, e0f5483 (MIT).
++import { useQuery } from "@tanstack/react-query";
++import {
++  ChevronsUpDown,
++  FileTextIcon,
++  HistoryIcon,
++  InfoIcon,
++  MessageSquarePlus,
++  SearchIcon,
++  Settings2Icon,
++  SettingsIcon,
++  ShieldCheckIcon,
++  UserRoundCogIcon,
++} from "lucide-react";
++import { useEffect, useState } from "react";
++import { Link, useLocation } from "react-router-dom";
++import { request } from "@/api/client";
++import type { RunSummary } from "@/api/types";
++import {
++  Dialog,
++  DialogContent,
++  DialogHeader,
++  DialogTitle,
++} from "@/components/ui/dialog";
++import { Input } from "@/components/ui/input";
++import {
++  DropdownMenu,
++  DropdownMenuContent,
++  DropdownMenuItem,
++  DropdownMenuSeparator,
++  DropdownMenuTrigger,
++} from "@/components/ui/dropdown-menu";
++import {
++  Sidebar,
+   SidebarHeader,
+   SidebarContent,
+   SidebarFooter,
+   SidebarRail,
++  SidebarMenu,
++  SidebarMenuItem,
++  SidebarMenuButton,
++  SidebarGroup,
++  SidebarGroupLabel,
++  SidebarGroupContent,
+   useSidebar,
+ } from "@/components/ui/sidebar";
+-import { useThreadActivity } from "@/core/threads/activity";
++import { STATUS } from "@/components/ui";
++import { useSettingsDialog, type SettingsSection } from "./settings-context";
++import { WorkspaceSidebarTrigger } from "./workspace-sidebar-trigger";
+ 
+-import { WorkspaceChannelsList } from "./channels/workspace-channels-list";
+-import { PluginNavigation } from "./plugin-navigation";
+-import { ProjectsSection } from "./projects-section";
+-import { RecentChatList } from "./recent-chat-list";
+-import { ThreadDeleteDialogProvider } from "./thread-delete-dialog";
+-import { WorkspaceHeader } from "./workspace-header";
+-import { WorkspaceNavChatList } from "./workspace-nav-chat-list";
+-import { WorkspaceNavMenu } from "./workspace-nav-menu";
+-import {
+-  WorkspaceSidebarFrame,
+-  useWorkspaceSidebarExpanded,
+-} from "./workspace-sidebar-frame";
+-
+-export function WorkspaceSidebar({
+-  ...props
+-}: React.ComponentProps<typeof Sidebar>) {
+-  // One activity poll per workspace (off unless the Gateway offers it): new
+-  // and changed server-created threads reach the thread lists without a
+-  // reload, and a read on another device clears their dots here.
+-  useThreadActivity();
+-  return (
+-    <ThreadDeleteDialogProvider>
+-      <WorkspaceSidebarFrame variant="sidebar" collapsible="icon" {...props}>
+-        <WorkspaceSidebarContents />
+-      </WorkspaceSidebarFrame>
+-    </ThreadDeleteDialogProvider>
+-  );
+-}
+-
+-function WorkspaceSidebarContents() {
+-  const isSidebarOpen = useWorkspaceSidebarExpanded();
+-  const { isMobile } = useSidebar();
++export function WorkspaceSidebar() {
++  const { pathname } = useLocation();
++  const { open, isMobile, setOpenMobile } = useSidebar();
++  const { openSettings } = useSettingsDialog();
++  const openSection = (section: SettingsSection) => {
++    setOpenMobile(false);
++    openSettings(section);
++  };
++  const [search, setSearch] = useState(false);
++  const [query, setQuery] = useState("");
++  const expanded = open || isMobile;
++  const { data, isError } = useQuery({
++    queryKey: ["runs"],
++    queryFn: () => request<{ runs: RunSummary[] }>("/runs"),
++    refetchInterval: 5000,
++  });
++  const runs = data?.runs ?? [];
++  useEffect(() => {
++    setOpenMobile(false);
++    setSearch(false);
++  }, [pathname, setOpenMobile]);
++  useEffect(() => {
++    const shortcut = (e: KeyboardEvent) => {
++      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
++        e.preventDefault();
++        setSearch((s) => !s);
++      }
++    };
++    window.addEventListener("keydown", shortcut);
++    return () => window.removeEventListener("keydown", shortcut);
++  }, []);
+   return (
+     <>
+-      <SidebarHeader className="py-0">
+-        <WorkspaceHeader />
+-      </SidebarHeader>
+-      <SidebarContent>
+-        <WorkspaceNavChatList />
+-        <PluginNavigation />
+-        <WorkspaceChannelsList />
+-        {isSidebarOpen && (
+-          <>
+-            <ProjectsSection />
+-            <RecentChatList />
+-          </>
+-        )}
+-      </SidebarContent>
+-      <SidebarFooter>
+-        <WorkspaceNavMenu />
+-      </SidebarFooter>
+-      {!isMobile && <SidebarRail />}
++      <Sidebar
++        variant="sidebar"
++        collapsible="icon"
++        aria-label="工作空间导航"
++        onClickCapture={(e) => {
++          if (isMobile && (e.target as HTMLElement).closest("a[href]"))
++            setOpenMobile(false);
++        }}
++      >
++        <SidebarHeader className="py-0">
++          <div className="group/workspace-header flex h-12 flex-col justify-center">
++            {expanded ? (
++              <div className="flex items-center justify-between gap-2">
++                <Link to="/" className="text-primary ml-2 font-serif text-lg">
++                  DeerFlow
++                </Link>
++                <WorkspaceSidebarTrigger />
++              </div>
++            ) : (
++              <Link
++                to="/"
++                aria-label="新建任务"
++                className="text-primary block text-center font-serif"
++              >
++                DF
++              </Link>
++            )}
++          </div>
++          <SidebarMenu>
++            <SidebarMenuItem>
++              <SidebarMenuButton
++                asChild
++                isActive={pathname === "/"}
++                tooltip="新建任务"
++              >
++                <Link to="/">
++                  <MessageSquarePlus size={16} />
++                  <span>新建任务</span>
++                </Link>
++              </SidebarMenuButton>
++            </SidebarMenuItem>
++            <SidebarMenuItem>
++              <SidebarMenuButton
++                onClick={() => {
++                  setQuery("");
++                  setOpenMobile(false);
++                  setSearch(true);
++                }}
++                tooltip="搜索任务"
++              >
++                <SearchIcon size={16} />
++                <span>搜索任务</span>
++                <kbd className="ml-auto text-[10px] text-muted-foreground/60 group-data-[collapsible=icon]:hidden">
++                  Ctrl K
++                </kbd>
++              </SidebarMenuButton>
++            </SidebarMenuItem>
++            <SidebarMenuItem>
++              <SidebarMenuButton
++                asChild
++                isActive={pathname === "/history"}
++                tooltip="任务历史"
++              >
++                <Link to="/history">
++                  <HistoryIcon size={16} />
++                  <span>任务历史</span>
++                </Link>
++              </SidebarMenuButton>
++            </SidebarMenuItem>
++          </SidebarMenu>
++        </SidebarHeader>
++        <SidebarContent>
++          <SidebarGroup className="group-data-[collapsible=icon]:hidden">
++            <SidebarGroupLabel>最近任务</SidebarGroupLabel>
++            <SidebarGroupContent>
++              <SidebarMenu>
++                {runs.map((run) => (
++                  <SidebarMenuItem key={run.id}>
++                    <SidebarMenuButton
++                      asChild
++                      isActive={pathname === `/runs/${run.id}`}
++                      className="h-auto min-h-9 py-2"
++                    >
++                      <Link
++                        to={`/runs/${run.id}`}
++                        aria-label={`${run.title}，第${run.week}周，${STATUS[run.status]}`}
++                      >
++                        <span className="min-w-0 flex-1 truncate">
++                          {run.title}
++                          <span className="ml-2 text-xs text-muted-foreground">
++                            第{run.week}周
++                          </span>
++                        </span>
++                        <span
++                          className={`size-1.5 shrink-0 rounded-full ${run.status === "paused" ? "bg-amber-500" : run.status === "awaiting_human" ? "bg-sky-500" : run.status === "completed" ? "bg-emerald-500" : "bg-muted-foreground/40"}`}
++                        />
++                      </Link>
++                    </SidebarMenuButton>
++                  </SidebarMenuItem>
++                ))}
++              </SidebarMenu>
++            </SidebarGroupContent>
++            {!runs.length && (
++              <p className="px-2 py-3 text-xs leading-6 text-muted-foreground">
++                {isError
++                  ? "任务列表暂不可用，请检查本地服务。"
++                  : "上传材料后，任务会保留在这里。"}
++              </p>
++            )}
++          </SidebarGroup>
++        </SidebarContent>
++        <SidebarFooter>
++          <SidebarMenu className="w-full">
++            <SidebarMenuItem>
++              <DropdownMenu>
++                <DropdownMenuTrigger asChild>
++                  <SidebarMenuButton
++                    size="lg"
++                    aria-label="设置与更多"
++                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
++                  >
++                    <SettingsIcon className="text-muted-foreground size-4" />
++                    {expanded && (
++                      <>
++                        <span className="text-muted-foreground">
++                          设置与更多
++                        </span>
++                        <ChevronsUpDown className="text-muted-foreground ml-auto size-4" />
++                      </>
++                    )}
++                  </SidebarMenuButton>
++                </DropdownMenuTrigger>
++                <DropdownMenuContent
++                  className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
++                  align="end"
++                  sideOffset={4}
++                >
++                  <DropdownMenuItem onSelect={() => openSection("models")}>
++                    <Settings2Icon />
++                    模型连接与调试
++                  </DropdownMenuItem>
++                  <DropdownMenuItem onSelect={() => openSection("employee")}>
++                    <UserRoundCogIcon />
++                    员工配置
++                  </DropdownMenuItem>
++                  <DropdownMenuItem onSelect={() => openSection("limits")}>
++                    <ShieldCheckIcon />
++                    执行限制与人工处理
++                  </DropdownMenuItem>
++                  <DropdownMenuSeparator />
++                  <DropdownMenuItem onSelect={() => openSection("about")}>
++                    <InfoIcon />
++                    关于工作空间
++                  </DropdownMenuItem>
++                </DropdownMenuContent>
++              </DropdownMenu>
++            </SidebarMenuItem>
++          </SidebarMenu>
++        </SidebarFooter>
++        {!isMobile && <SidebarRail />}
++      </Sidebar>
++      <Dialog open={search} onOpenChange={setSearch}>
++        <DialogContent className="sm:max-w-xl" aria-describedby={undefined}>
++          <DialogHeader>
++            <DialogTitle>搜索任务</DialogTitle>
++          </DialogHeader>
++          <Input
++            autoFocus
++            aria-label="搜索任务名称或周次"
++            placeholder="输入任务名称、周次或任务编号"
++            value={query}
++            onChange={(e) => setQuery(e.target.value)}
++          />
++          <div className="max-h-[55vh] overflow-auto">
++            {runs
++              .filter((r) =>
++                `${r.title} 第${r.week}周 ${r.id}`.includes(query.trim()),
++              )
++              .map((run) => (
++                <Link
++                  key={run.id}
++                  to={`/runs/${run.id}`}
++                  onClick={() => setSearch(false)}
++                  className="hover:bg-accent flex items-center gap-3 rounded-md px-3 py-3 text-sm"
++                >
++                  <FileTextIcon className="size-4 text-muted-foreground" />
++                  <span className="flex-1">
++                    {run.title}
++                    <span className="ml-2 text-xs text-muted-foreground">
++                      第{run.week}周
++                    </span>
++                  </span>
++                  <span className="text-xs text-muted-foreground">
++                    {STATUS[run.status]}
++                  </span>
++                </Link>
++              ))}
++            {runs.filter((r) =>
++              `${r.title} 第${r.week}周 ${r.id}`.includes(query.trim()),
++            ).length === 0 && (
++              <p className="py-8 text-center text-sm text-muted-foreground">
++                没有匹配的任务
++              </p>
++            )}
++          </div>
++        </DialogContent>
++      </Dialog>
+     </>
+   );
+ }

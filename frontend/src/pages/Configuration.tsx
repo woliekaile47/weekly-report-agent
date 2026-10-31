@@ -62,25 +62,31 @@ export function Configuration({
           <p className="muted">
             直接编辑岗位职责、步骤和规则，业务人员无需修改程序。配置随任务保存快照。
           </p>
-          {Object.entries(files).map(([k, v]) => (
-            <section className="card" key={k}>
-              <h2>
-                {k.includes("SKILL")
-                  ? "岗位职责、工作步骤和注意事项"
-                  : k.includes("columns")
-                    ? "字段与基础表映射"
-                    : "调用限制、业务阈值与质检规则"}
-              </h2>
-              <small>{k}</small>
-              <textarea
-                aria-label={k}
-                className="code-editor"
-                value={v}
-                onChange={(e) => setFiles({ ...files, [k]: e.target.value })}
-                rows={k.includes("SKILL") ? 20 : 14}
-              />
-            </section>
-          ))}
+          {Object.entries(files)
+            .sort(([a], [b]) => {
+              const priority = (key: string) =>
+                key.includes("SKILL") ? 0 : key.includes("employee") ? 1 : 2;
+              return priority(a) - priority(b);
+            })
+            .map(([k, v]) => (
+              <section className="card" key={k}>
+                <h2>
+                  {k.includes("SKILL")
+                    ? "岗位职责、工作步骤和注意事项"
+                    : k.includes("columns")
+                      ? "字段与基础表映射"
+                      : "调用限制、业务阈值与质检规则"}
+                </h2>
+                <small>{k}</small>
+                <textarea
+                  aria-label={k}
+                  className="code-editor"
+                  value={v}
+                  onChange={(e) => setFiles({ ...files, [k]: e.target.value })}
+                  rows={k.includes("SKILL") ? 20 : 14}
+                />
+              </section>
+            ))}
           <button className="primary">保存配置</button>
         </form>
       )}

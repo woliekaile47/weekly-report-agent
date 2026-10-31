@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StateSnapshot } from "../api/types";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { RunDetailPage } from "./RunDetailPage";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 // Layout measurement is browser-only; the browser acceptance test covers React Flow itself.
 vi.mock("../components/GraphView", () => ({
@@ -47,6 +48,12 @@ const paused = {
 } as unknown as StateSnapshot;
 
 function openTask(snapshot: StateSnapshot) {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("1099"),
+    media: query,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
   vi.stubGlobal("EventSource", EventSourceStub);
   vi.stubGlobal(
     "fetch",
@@ -54,9 +61,11 @@ function openTask(snapshot: StateSnapshot) {
   );
   return render(
     <MemoryRouter initialEntries={["/runs/task-missing-sales"]}>
-      <Routes>
-        <Route path="/runs/:id" element={<RunDetailPage />} />
-      </Routes>
+      <SidebarProvider>
+        <Routes>
+          <Route path="/runs/:id" element={<RunDetailPage />} />
+        </Routes>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -76,9 +85,15 @@ describe("checkpoint rendering regression", () => {
   it("supports material and quality tabs before their outputs have been generated", async () => {
     openTask(paused);
     await screen.findByRole("heading", { name: "缺少材料的任务" });
-    fireEvent.click(screen.getByRole("tab", { name: "材料识别" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "材料识别" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     expect(screen.getByText("读取材料后展示识别结果。")).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "质检记录" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "质检记录" }), {
+      button: 0,
+      ctrlKey: false,
+    });
     expect(
       screen.getByText("生成 Word 后执行检查；当前没有质检记录。"),
     ).toBeTruthy();

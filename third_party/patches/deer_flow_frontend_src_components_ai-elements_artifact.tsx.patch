@@ -1,0 +1,16 @@
+--- deer-flow/frontend/src/components/ai-elements/artifact.tsx
++++ adapted/frontend/src/components/ai-elements/artifact.tsx
+@@ -1,3 +1,4 @@
++// DeerFlow e0f5483, MIT.
+ "use client";
+ 
+ import { Button } from "@/components/ui/button";
+@@ -58,7 +59,7 @@
+     {...props}
+   >
+     {children ?? <XIcon className="size-4" />}
+-    <span className="sr-only">Close</span>
++    <span className="sr-only">关闭成果面板</span>
+   </Button>
+ );
+ 

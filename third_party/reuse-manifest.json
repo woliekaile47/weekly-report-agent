@@ -4,83 +4,355 @@
     "upstream_file": "frontend/src/components/GraphView.tsx",
     "local_file": "frontend/src/components/GraphView.tsx",
     "upstream_sha256": "45fd51b8b31a9491515135a23458d7f8f0fc71a12706d11189fd2df5231b9b7b",
-    "adapted_sha256": "371394acee3198774e72dce402c7a53f4923e3d5e111ad020ed1b8175abb86aa"
+    "adapted_sha256": "371394acee3198774e72dce402c7a53f4923e3d5e111ad020ed1b8175abb86aa",
+    "hash_normalization": "utf-8-lf"
   },
   {
     "upstream_project": "invoice",
     "upstream_file": "frontend/src/hooks/useRunStream.ts",
     "local_file": "frontend/src/hooks/useRunStream.ts",
     "upstream_sha256": "9a7f6f042360bc8fa06b3bc85fa5771b73727ef79cd603c1e0347d99c3bf5b5a",
-    "adapted_sha256": "8194f5bf88b19ebe3e7ab6352daf122b44f2b40de3ed47e9e01694cef32e5529"
+    "adapted_sha256": "8194f5bf88b19ebe3e7ab6352daf122b44f2b40de3ed47e9e01694cef32e5529",
+    "hash_normalization": "utf-8-lf"
   },
   {
     "upstream_project": "invoice",
     "upstream_file": "backend/app/graph/graph.py",
     "local_file": "report_agent/workflow.py",
     "upstream_sha256": "396a464372d4149c9d26214313e24bdc2c3e6e0b161aced1cd4359ed8e62e659",
-    "adapted_sha256": "2fa8b2a08b4c84846b5c5141bc33831bc0dda96d8b4d0b798a19905dc812539f"
+    "adapted_sha256": "2fa8b2a08b4c84846b5c5141bc33831bc0dda96d8b4d0b798a19905dc812539f",
+    "hash_normalization": "utf-8-lf"
   },
   {
     "upstream_project": "invoice",
     "upstream_file": "backend/app/api/routers/runs.py",
     "local_file": "report_agent/api.py",
     "upstream_sha256": "b9b3aed426c5bfbd307dcc0581f4d98b4daf30f3ce2d2114063c00f189238c75",
-    "adapted_sha256": "9e16142fec1089eff759cb5edaf235e0e5b1f7ebda0d33fa10d4b3ba088949ca"
-  },
-  {
-    "upstream_project": "invoice",
-    "upstream_file": "frontend/src/App.tsx",
-    "local_file": "frontend/src/App.tsx",
-    "upstream_sha256": "1d636a3d3dbf723f3897b44d8da7fa1d21d924777a7dd344c86e562fbdedd8e0",
-    "adapted_sha256": "145678bd0534ab398be2da106121c2d0fffb8fd29ab2ff45f351e5e047bdcf35"
-  },
-  {
-    "upstream_project": "invoice",
-    "upstream_file": "frontend/src/index.css",
-    "local_file": "frontend/src/index.css",
-    "upstream_sha256": "0bbb8fad94005a51e5073097119eb644a209e393cdcb8054ef9feee781cd9e66",
-    "adapted_sha256": "8b3088709fc00d8400e7717c186e2f0928b04f6cc42b09d9bbc51f9b5923c740"
+    "adapted_sha256": "ab93472003916c25355e85a49acbf9a272ba5985eae7ff469e94c18ecc7bd48a",
+    "hash_normalization": "utf-8-lf"
   },
   {
     "upstream_project": "invoice",
     "upstream_file": "frontend/src/main.tsx",
     "local_file": "frontend/src/main.tsx",
     "upstream_sha256": "ef36203b9ebe606e648ff671ad6d1342f9f322de5b80e145eed5c013c8419886",
-    "adapted_sha256": "c32892a20244d4dc5c4b038f7c54468212b65efcdafc63672e0fce8e8991b029"
-  },
-  {
-    "upstream_project": "invoice",
-    "upstream_file": "frontend/src/pages/UploadPage.tsx",
-    "local_file": "frontend/src/pages/UploadPage.tsx",
-    "upstream_sha256": "663f9130f0ebb8a6a5a7654fac620b721383d9496fb51b30673c8f35ead2b99f",
-    "adapted_sha256": "0e707b147dc6cae960e58ffe657c2b2f271bb94c9f4192124b99cd6a8d3c7031"
+    "adapted_sha256": "c32892a20244d4dc5c4b038f7c54468212b65efcdafc63672e0fce8e8991b029",
+    "hash_normalization": "utf-8-lf"
   },
   {
     "upstream_project": "invoice",
     "upstream_file": "frontend/src/pages/HistoryPage.tsx",
     "local_file": "frontend/src/pages/HistoryPage.tsx",
     "upstream_sha256": "f381e88d3ec2ad507297b81f3a41c84a21d417dfd6eb50e7ffa73353e751c784",
-    "adapted_sha256": "814beb845a3392094b98106d69b573e3bcd265479ea4698438b9218c468751aa"
-  },
-  {
-    "upstream_project": "invoice",
-    "upstream_file": "frontend/src/pages/RunDetailPage.tsx",
-    "local_file": "frontend/src/pages/RunDetailPage.tsx",
-    "upstream_sha256": "cac2f74156f2b53281878a8ac3f8b6ad008b672257f09344d2b01a6799d71a0f",
-    "adapted_sha256": "7aef2a6a6da4b284284c9d23f03346b4dfcb0062dc41d67d712ba0db9a9a16c8"
-  },
-  {
-    "upstream_project": "invoice",
-    "upstream_file": "frontend/src/components/NodePanel.tsx",
-    "local_file": "frontend/src/components/NodePanel.tsx",
-    "upstream_sha256": "c87554a0c5d705c52ce56c29bf222a4a89dc8ede5e6958a813989b041af81135",
-    "adapted_sha256": "6a27904c91de505b08219e1bb21d9585c174b58f54ca3ce09c3c8a554f9ab29e"
+    "adapted_sha256": "eacfd2deffc82c0fb9a21a476d8295d4cab8b4f23bf35173184316bf2148d8d8",
+    "hash_normalization": "utf-8-lf"
   },
   {
     "upstream_project": "invoice",
     "upstream_file": "frontend/src/components/RunHistoryList.tsx",
     "local_file": "frontend/src/components/RunHistoryList.tsx",
     "upstream_sha256": "ab752b67be0b126538d0584703773c14c92c619f69b5c9b17d9ab109ff9ca83e",
-    "adapted_sha256": "7c502a0b34787566cd13c3392ae3990e87aee750899962d60ba7ddbb739bfa34"
+    "adapted_sha256": "4ddb26f778220f92d0cacf6d63ddfd69cad81ac0563fb7483acb299a1f64fc7b",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/badge.tsx",
+    "local_file": "frontend/src/components/ui/badge.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "d8cc0aab1846d2f904878bb8d853f7695081aa741ca2914c755250f8f3bb1e86",
+    "adapted_sha256": "f8eed10969945f6b48a5d8a7244fc7131f2863b8ce5c1f3ef09d17d1392a731c",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/button.tsx",
+    "local_file": "frontend/src/components/ui/button.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "7d2194f28c9d64ecf733f79809146341c674748c78bea5ed53efb91c44f68fb3",
+    "adapted_sha256": "7adacc8e66d43b7a394a348ef8d8321e40cd85c50b10d318da2928237af3bf53",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/card.tsx",
+    "local_file": "frontend/src/components/ui/card.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "830cdc27dd183472c510cdf993fb0d5d3c77e4770c0dcb14d517f6316a2aa611",
+    "adapted_sha256": "aa1d42d205cb08d1d616db3051ee9950ecd70acd9205730502a4dedf9960116d",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/collapsible.tsx",
+    "local_file": "frontend/src/components/ui/collapsible.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "b976803b697ec93d505f5e505e39d1e0d007d4a96b8dc612d9a0c4ef359b0b79",
+    "adapted_sha256": "574ea94b31529df8f21dafc0e5ac42fd90555802067b4fa2efccf1045b7c407b",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/dialog.tsx",
+    "local_file": "frontend/src/components/ui/dialog.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "9e594e4c46792510a022327041c47a971e169306cc42dbe3c7e8e8dd79fd5972",
+    "adapted_sha256": "9c02f862dc146b5dde0aedeeb6c2d46451e1cd20ec07faa2b8795a4edc5b8c3c",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/dropdown-menu.tsx",
+    "local_file": "frontend/src/components/ui/dropdown-menu.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "bd123d026a20eac5d006115e7036d5f4b9b65e87bbfd38cf12479e64ef999f7a",
+    "adapted_sha256": "0fd7266879b8293b41c27015a6c79e0284daf8c4ef994452e5cd7a68000f9a19",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/input-group.tsx",
+    "local_file": "frontend/src/components/ui/input-group.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "c9992a5c2e30480e7604d99ac522d8bf3c1b42b73a66612f48fde7527a6e0cab",
+    "adapted_sha256": "82e46f93dcdf47943dab2ebe189a2b3f7259812faaa349eaa4ff02d6cc52f905",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/input.tsx",
+    "local_file": "frontend/src/components/ui/input.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "5316b2ad93e34491d5b52e87be8648d9919e89a00566b18019692b8a162b2c49",
+    "adapted_sha256": "89d2526d2d89f259be4b2b0848ff6c6eef022c259b6d5ff82712b8ee3e2828bb",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/resizable.tsx",
+    "local_file": "frontend/src/components/ui/resizable.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "77b04b7ccdb9142e13806a63c695f2031786dec8c60a2cad3b91c1465463e40c",
+    "adapted_sha256": "2274727323c6fff6d19e25c224075cc328047757f753e8316fe65ed6362d816f",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/scroll-area.tsx",
+    "local_file": "frontend/src/components/ui/scroll-area.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "bb67a68457c993230006fe46f04c8fee6e91721868b92d4bbf46b45c8e4407ea",
+    "adapted_sha256": "a567aa82637229a1b4680af029a074a06e080f11fbbedb3cab5130e836239000",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/separator.tsx",
+    "local_file": "frontend/src/components/ui/separator.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "6458cf54fd4d455b05d372296e694564221d36d1e32a0a477c363727fd731935",
+    "adapted_sha256": "567b04ad4a3cd0e3752448c22d19bdd3682ff2b6c8571a08a3087eee35e3cd93",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/sheet.tsx",
+    "local_file": "frontend/src/components/ui/sheet.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "f3a4a76bf287c88b98521fbdf97445b12c6b9ad41a7e1f14b458f78d5afab55f",
+    "adapted_sha256": "900ecbb7084a3dd2c7bc38105a642a2aa792a6def2a3e7b88f5bf18c6b69c8e0",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/sidebar.tsx",
+    "local_file": "frontend/src/components/ui/sidebar.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "95e860d0cb762eba848f7e2a3072322c450d7632a998edb489569d12d2a024db",
+    "adapted_sha256": "249f5cb32e099777396f8cb7b494d440069fd3c5120834bfc4816cc47c3f5704",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/skeleton.tsx",
+    "local_file": "frontend/src/components/ui/skeleton.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "1f75b999a5ad2f65e8fb807faa2b3fccef9eb333996fb4c9030575dac7393091",
+    "adapted_sha256": "13d78875eb75b007b5ed248a0efddbeaaeb1c580e002b2443d654039e3a6f96a",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/tabs.tsx",
+    "local_file": "frontend/src/components/ui/tabs.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "b50af4fd51cd481b21547478e13b767f6fc92ca9af0d2d1dc1c290e30d68f348",
+    "adapted_sha256": "560bf5b2ab450bce60df0dc0ad90d0a6b444803274fdc60e058f8cd51d118a91",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/textarea.tsx",
+    "local_file": "frontend/src/components/ui/textarea.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "05137f95963f795c0429206f1c44d3ddeac4adde72cb176db6aa88e2284cf336",
+    "adapted_sha256": "698b16235cd30bf3baa30fa26bd5649913e0aec9d938ec9ed845f9c7419b2edd",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ui/tooltip.tsx",
+    "local_file": "frontend/src/components/ui/tooltip.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "cb51ab117c35405603210f792fe54326d26516b6da6727c787ebf2fb541df796",
+    "adapted_sha256": "bc3058457422ae4cae27ec053b1c162a8ec09465e544b569d6aa586ad7d4ed54",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ai-elements/artifact.tsx",
+    "local_file": "frontend/src/components/ai-elements/artifact.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "00a18235d4e14209b10743fb06c8e2e1e3ae028470a18f52a140b4ba073072b2",
+    "adapted_sha256": "50b9b63c5a9da58f1618ec7cd08c31b641a883099a63090f3cef0e2b5b500222",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/ai-elements/chain-of-thought.tsx",
+    "local_file": "frontend/src/components/ai-elements/chain-of-thought.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "0ca4110a58c988af8ff0157491a2b4ebf4938cb75b88d10b959e2d9e72c0281b",
+    "adapted_sha256": "620c9703dd22f7473c248717f1a19969afaaa19d4bef5ea8b2cf631033da4817",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/hooks/use-mobile.ts",
+    "local_file": "frontend/src/hooks/use-mobile.ts",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "b37cbea87dedb1021628f3546ecc79c1e2510feefd513da8ee1eec9056eb99a6",
+    "adapted_sha256": "e64281f4cdba332a4c5dab66d8fca5089feba1153b3fafb13038794bfc616d7a",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/lib/utils.ts",
+    "local_file": "frontend/src/lib/utils.ts",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "f046ab1436dfedb87daf9acd4990159315788274317a9a75cbf874666e923ebc",
+    "adapted_sha256": "9203da7bb0c7a3b6adacbbc22c7d017e9a9f928b33dfce948ef31c7d295bc458",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/workspace-sidebar-trigger.tsx",
+    "local_file": "frontend/src/components/workspace/workspace-sidebar-trigger.tsx",
+    "reuse_kind": "component_adaptation",
+    "upstream_sha256": "c45fc5d1d0068c0658a6d9f51bca4b12765fa34c05e05a60ff691598868e07ec",
+    "adapted_sha256": "fca516dcfff48576f51e3ff3c1a54b5d437cd6f3e5a7daaf04730a82b4d89963",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/styles/globals.css",
+    "local_file": "frontend/src/styles/deerflow-theme.css",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "d79b83b8acdabbae1f63568e732010fc7a7d59b4fc6eb5bbd17b178b3fd1bca8",
+    "adapted_sha256": "618e2e50db7c707191be9b6e55433be1dcc2c37c3ac27cb09bda203bd1f02ef0",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/workspace-sidebar.tsx",
+    "local_file": "frontend/src/components/workspace/workspace-sidebar.tsx",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "fdc3592cde8c5b8a7fa6e27dda5c963fa0e408d1231ae2f5c2b08497b247a43b",
+    "adapted_sha256": "3b56a658720f44de267610a78ffa2a86bb045b9a748c0a026b154355773f96e1",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/chats/chat-page.tsx",
+    "local_file": "frontend/src/components/workspace/workspace-header.tsx",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "320968e792bcb6216b7a6d01367bb4013799c2b7fc517b85d592cd2f3dc8b271",
+    "adapted_sha256": "4f058b5c1f2dee9d692f669abd5c43684e762d120a192e5aa8d7a5756a5a966b",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/chats/chat-box.tsx",
+    "local_file": "frontend/src/components/workspace/workspace-split.tsx",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "dc2355c41442c8daa31ddc630a920e324677b1cce8fbcc1548d8a678ad4f690d",
+    "adapted_sha256": "1b8ea2b6f0e0bc9c8396b48bb9a5accb3f428f825ffaf5c6e88f2f7c0b6524ec",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/settings/settings-dialog.tsx",
+    "local_file": "frontend/src/components/workspace/settings-dialog.tsx",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "3ee39f967ae2809918cdbd6c0c217abef70a881fee7d46634d6670779bb67464",
+    "adapted_sha256": "82ac00328e0a292e789aab39c728c97bc2916c9643830795f85510acc9d984bc",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/artifacts/artifact-file-list.tsx",
+    "local_file": "frontend/src/components/workspace/artifact-file-list.tsx",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "509967492866e2f04439ede5f78b050d26458f833b0e4bec8ab35d48c0a82d1c",
+    "adapted_sha256": "29c69572ace2fdee460231fcc01c55020dc24737db0b427ea1f1cdd09808e52a",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/artifacts/artifact-file-detail.tsx",
+    "local_file": "frontend/src/components/workspace/artifact-panel.tsx",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "8e7a38e4ae6df5a3431c1e8cc7a6b24bba0b7fa7572e774f2f8eb5218c969c47",
+    "adapted_sha256": "4d98db29a0510739ed57b19e142a2cabbcd64f93cf809d7edb9f777f71299f4e",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "deer-flow",
+    "upstream_commit": "e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f",
+    "upstream_file": "frontend/src/components/workspace/input-box.tsx",
+    "local_file": "frontend/src/pages/UploadPage.tsx",
+    "reuse_kind": "layout_adaptation",
+    "upstream_sha256": "f8437af1f97aee83a80d5d7c4452052ea21e699d9c489b30ad3b0a6b04cbbd8c",
+    "adapted_sha256": "e6a7b09f99f3deefd92070a9f55ed0f899b2f2e2677bad94eb801ca964e69cb6",
+    "hash_normalization": "utf-8-lf"
   }
 ]

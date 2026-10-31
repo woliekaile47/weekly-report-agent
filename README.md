@@ -4,11 +4,13 @@
 
 ## 启动
 
-Windows 需要 Python 3.11+、Node.js、Microsoft Word（用于真实页数与 PDF 预览检查）。运行 `start.bat`；首次安装需要网络。浏览器访问 http://127.0.0.1:8501 。
+Windows 需要 Python 3.11+、Node.js 22.12+、Microsoft Word（用于真实页数与 PDF 预览检查）。运行 `start.bat`；首次安装需要网络。浏览器访问 http://127.0.0.1:8501 。
 
-`.env` 保存在后端，已有模型连接会沿用；可在“工作空间设置 → 模型连接”修改，密钥不回传浏览器。公开示例在 `.env.example`，不得提交真实 `.env`。
+`.env` 保存在后端，已有模型连接会沿用；可在侧栏底部“设置与更多 → 模型连接与调试”修改，密钥不回传浏览器。公开示例在 `.env.example`，不得提交真实 `.env`。
 
-界面统一改编自 Invoice Audit Assistant（MIT）：顶部导航、上传表单、任务历史、流程图与节点输出双栏，以及人工审核区。保留原组件的布局与配色，只适配经营周报内容和必需设置；不包含上游模拟案例。
+界面基于 [DeerFlow e0f5483（MIT）](https://github.com/bytedance/deer-flow/tree/e0f5483fdf4466c3c9b3d19d01f6c7e6f4ed641f) 适配：直接复用主题、响应式侧栏、Radix 组件、分屏、文件卡片、执行步骤与设置弹窗。左侧最近任务，中间实际执行过程与人工审核，右侧真实成果；窄屏使用抽屉预览。React 19、Tailwind 4；本地接口继续运行原LangGraph业务，不使用上游模拟案例。
+
+![DeerFlow经营周报工作区](docs/screenshots/deerflow-workspace.png)
 
 ```powershell
 python -m venv .venv
@@ -37,7 +39,7 @@ npm.cmd run build --prefix frontend
 - `config/reference/*.csv`：企业提供的基础资料，仅用于赛事配置；不含销售流水。
 - `templates/weekly-report.docx`：首次生成后可用 Word 编辑的 docxtpl 模板。
 
-“工作空间设置 → 员工配置”可以修改文本配置，“执行限制与人工处理”展示限制值及理由。新任务保存创建时快照，已有任务保持原岗位配置。流程权限、非法状态拒绝和审核校验由程序执行。
+侧栏底部“设置与更多 → 员工配置”可以修改文本配置，“执行限制与人工处理”展示限制值及理由。新任务保存创建时快照，已有任务保持原岗位配置。流程权限、非法状态拒绝和审核校验由程序执行。
 
 ## 验证
 
@@ -47,9 +49,9 @@ npm.cmd run build --prefix frontend
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\ruff.exe check report_agent tests
 .\eval.ps1
-npm.cmd test --prefix frontend -- --pool=threads --maxWorkers=1 --minWorkers=1
+npm.cmd test --prefix frontend -- --maxWorkers=1
 ```
 
 pytest 的模型替身仅位于 `tests/`，不在产品入口提供演示或自动审批。真实模型运行、工程回归、企业判定点必须分别报告，详见 `docs/verification.md`。完整赛事验收还需人工审阅、企业盲测及现场变更。
 
-服务启动后，可运行 `.\.venv\Scripts\python.exe scripts/check_ui.py`，以本机 Edge 和 Chrome 检查 375/760/1900px 布局、真实任务各页签及脚本加载失败提示；只读取现有任务，不创建任务或提交审核。截图和检查结果保存在 `runtime/ui-qa/`。
+服务启动后，可运行 `.\.venv\Scripts\python.exe scripts/check_ui.py`，以本机 Edge 和 Chrome 检查 375/760/1024/1600px 布局、真实任务各页签、PDF翻页、面板拖拽恢复、分屏切换、提示关闭、搜索与设置。双文件上传验证拦截写入，不创建产品任务或提交审核；二进制上传另外通过隔离接口测试。截图和结果保存在 `runtime/ui-qa/deerflow/`。

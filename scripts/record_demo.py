@@ -35,7 +35,7 @@ def main():
             )
             page.wait_for_timeout(seconds * 1000)
 
-        page.get_by_role("link", name="上传与执行", exact=True).click()
+        page.get_by_role("link", name="新建任务", exact=True).click()
         chapter(
             "经营周报员工｜真实应用巡览",
             "LangGraph 编排 · MCP 官方 SDK · 可配置岗位技能 · Word 交付。画面展示实际应用与真实模型生成成果，不使用模拟对话。",
@@ -53,7 +53,7 @@ def main():
             "读取销售、门店、商品和目标表。44,820 条原始记录，按记录 ID 剔除 29 条相同重复上传；冲突记录暂停核实。",
             9,
         )
-        page.get_by_role("tab", name="周报与审核").click()
+        page.get_by_role("tab", name="周报内容").click()
         page.get_by_role("heading", name="异常与原因", exact=True).scroll_into_view_if_needed()
         chapter(
             "异常、原文证据与纪要冲突",
@@ -61,7 +61,7 @@ def main():
             10,
         )
         page.get_by_role("tab", name="质检记录").click()
-        page.evaluate("window.scrollTo(0,0)")
+        page.locator("#task-scroll").evaluate("e => e.scrollTop = 0")
         chapter(
             "程序质检｜三页、两图及可追溯数字",
             "检查结构、数字来源、异常覆盖、原文、Word 表格、图表与真实页数。本周 Word 已经 Microsoft Word 实际排版验证为 3 页。",
@@ -79,24 +79,25 @@ def main():
             "职责、步骤、注意事项、阈值与质检以技能或 YAML 文件维护。新任务保存配置快照；已受理任务保持原配置。",
             10,
         )
-        page.get_by_role("link", name="执行限制与人工处理", exact=True).click()
+        page.goto("http://127.0.0.1:8501/settings/limits", wait_until="networkidle")
         chapter(
             "有界执行与人工处理",
             "每轮 8 次模型请求，单次 90 秒，活动执行 600 秒。超限暂停，填写处理人和处理意见后明确恢复。限制理由随交付包保存。",
             9,
         )
         page.goto(f"http://127.0.0.1:8501/runs/{task_id}", wait_until="networkidle")
-        page.get_by_role("tab", name="周报与审核").click()
+        page.get_by_role("tab", name="周报内容").click()
         page.get_by_role("heading", name=re.compile("^人工审核")).scroll_into_view_if_needed()
         chapter(
             "交付前人工审核｜支持同任务返工",
             "审核人可通过或填写意见退回，退回后生成新版本、重新质检和送审。本视频只浏览待审核成果，不替业务人员批准；正式交付包需通过当前版本后生成。",
             12,
         )
-        page.get_by_text("关于工作空间", exact=True).click()
+        page.get_by_role("button", name="设置与更多", exact=True).click()
+        page.get_by_role("menuitem", name="关于工作空间", exact=True).click()
         chapter(
             "开源复用与验证边界",
-            "界面和流程复用 Invoice Audit Assistant，文本处理复用 GenSlide，Word 使用 docxtpl。来源、版本与许可均已保留；企业盲测与业务审核仍需现场完成。",
+            "工作区复用 DeerFlow，流程复用 Invoice Audit Assistant，文本处理复用 GenSlide，Word 使用 docxtpl。来源、版本与许可均已保留；企业盲测与业务审核仍需现场完成。",
             10,
         )
         video = page.video

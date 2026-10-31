@@ -1,141 +1,99 @@
-// Adapted from Invoice Audit Assistant App.tsx (a0a0fc5, MIT).
-import { NavLink, Route, Routes } from "react-router-dom";
-
-import { HistoryPage } from "./pages/HistoryPage";
-import { RunDetailPage } from "./pages/RunDetailPage";
-import { UploadPage } from "./pages/UploadPage";
-import { Configuration } from "./pages/Configuration";
-
-function NavItem({
-  to,
-  children,
-  end = true,
-}: {
-  to: string;
-  children: React.ReactNode;
-  end?: boolean;
-}) {
-  return (
-    <NavLink
-      to={to}
-      end={end}
-      className={({ isActive }) =>
-        `rounded-md px-3 py-1.5 text-sm font-medium ${
-          isActive
-            ? "bg-brand-600 text-white"
-            : "text-slate-600 hover:bg-slate-100"
-        }`
-      }
-    >
-      {children}
-    </NavLink>
-  );
-}
+// Workspace shell adapted from DeerFlow e0f5483 (MIT).
+import { useEffect, useMemo, useState } from "react";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
+import { WorkspaceHeader } from "@/components/workspace/workspace-header";
+import { SettingsDialog } from "@/components/workspace/settings-dialog";
+import {
+  SettingsContext,
+  type SettingsSection,
+} from "@/components/workspace/settings-context";
+import { HistoryPage } from "@/pages/HistoryPage";
+import { RunDetailPage } from "@/pages/RunDetailPage";
+import { UploadPage } from "@/pages/UploadPage";
 
 export default function App() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-3">
-          <div>
-            <h1 className="text-base font-semibold text-slate-900">
-              经营周报工作空间
-            </h1>
-            <p className="text-xs text-slate-400">
-              LangGraph · 经营分析与人工审核
-            </p>
-          </div>
-          <nav aria-label="主导航" className="flex flex-wrap gap-1">
-            <NavItem to="/">上传与执行</NavItem>
-            <NavItem to="/history">任务历史</NavItem>
-            <NavItem to="/settings" end={false}>
-              工作空间设置
-            </NavItem>
-          </nav>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
-        <Routes>
-          <Route path="/" element={<UploadPage />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/runs/:id" element={<RunDetailPage />} />
-          <Route path="/settings/*" element={<SettingsPage />} />
-          <Route
-            path="*"
-            element={
-              <div className="mx-auto max-w-2xl">
-                <h2 className="mb-3 text-xl font-semibold">页面不存在</h2>
-                <a
-                  href="/history"
-                  className="text-sm text-brand-600 hover:underline"
-                >
-                  返回任务历史
-                </a>
-              </div>
-            }
-          />
-        </Routes>
-      </main>
-      <footer className="border-t border-slate-200 bg-white">
-        <details className="mx-auto max-w-6xl px-4 py-3 text-xs text-slate-400">
-          <summary className="w-fit cursor-pointer">关于工作空间</summary>
-          <div className="mt-3 space-y-2 leading-6 text-slate-500">
-            <p>
-              本地单用户工作空间。任务经过程序质检与人工审核后交付；岗位做法和执行限制可在设置中修改。
-            </p>
-            <p>
-              界面改编自{" "}
-              <a
-                className="text-brand-600 hover:underline"
-                href="https://github.com/manuelbomi/LangGraph-based-Invoice-Receipt-Audit-Reconciliation-Assistant"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Invoice Audit Assistant
-              </a>
-              （MIT）。版本、许可及改动见项目 THIRD_PARTY_NOTICES.md。
-            </p>
-          </div>
-        </details>
-      </footer>
-    </div>
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [section, setSection] = useState<SettingsSection>("models");
+  const settings = useMemo(
+    () => ({
+      openSettings: (next: SettingsSection = "models") => {
+        setSection(next);
+        setSettingsOpen(true);
+      },
+    }),
+    [],
   );
-}
-
-function SettingsPage() {
+  useEffect(() => {
+    if (pathname.startsWith("/settings")) {
+      const part = pathname.split("/")[2];
+      setSection(
+        part === "employee" || part === "limits" || part === "about"
+          ? part
+          : "models",
+      );
+      setSettingsOpen(true);
+    }
+  }, [pathname]);
   return (
-    <div className="mx-auto max-w-3xl">
-      <nav
-        aria-label="设置分类"
-        className="mb-6 flex flex-wrap gap-1 border-b border-slate-200 pb-3"
+    <SettingsContext.Provider value={settings}>
+      <SidebarProvider
+        defaultOpen={
+          !document.cookie.split("; ").includes("sidebar_state=false")
+        }
+        className="h-svh min-h-0 overflow-hidden"
       >
-        <NavItem to="/settings">模型连接</NavItem>
-        <NavItem to="/settings/employee">员工配置</NavItem>
-        <NavItem to="/settings/limits">执行限制与人工处理</NavItem>
-      </nav>
-      <Routes>
-        <Route
-          index
-          element={<Configuration key="settings" page="settings" />}
+        <WorkspaceSidebar />
+        <SidebarInset className="h-svh min-h-0 min-w-0 overflow-hidden">
+          <Routes>
+            <Route path="/" element={<UploadPage />} />
+            <Route path="/history" element={<HistoryPage />} />
+            <Route path="/runs/:id" element={<RunDetailPage />} />
+            <Route
+              path="/settings/*"
+              element={
+                <>
+                  <WorkspaceHeader title="工作空间设置" />
+                  <div className="grid flex-1 place-items-center">
+                    <button
+                      className="secondary"
+                      onClick={() => setSettingsOpen(true)}
+                    >
+                      打开设置
+                    </button>
+                  </div>
+                </>
+              }
+            />
+            <Route
+              path="*"
+              element={
+                <>
+                  <WorkspaceHeader title="页面不存在" />
+                  <div className="grid flex-1 place-items-center">
+                    <a className="secondary" href="/history">
+                      返回任务历史
+                    </a>
+                  </div>
+                </>
+              }
+            />
+          </Routes>
+        </SidebarInset>
+        <SettingsDialog
+          open={settingsOpen}
+          section={section}
+          onSectionChange={setSection}
+          onOpenChange={(open) => {
+            setSettingsOpen(open);
+            if (!open && pathname.startsWith("/settings"))
+              navigate("/", { replace: true });
+          }}
         />
-        <Route
-          path="employee"
-          element={<Configuration key="employee" page="employee" />}
-        />
-        <Route
-          path="limits"
-          element={<Configuration key="limits" page="limits" />}
-        />
-        <Route
-          path="*"
-          element={
-            <p className="text-sm text-slate-500">
-              设置页面不存在，请从上方选择。
-            </p>
-          }
-        />
-      </Routes>
-    </div>
+      </SidebarProvider>
+    </SettingsContext.Provider>
   );
 }

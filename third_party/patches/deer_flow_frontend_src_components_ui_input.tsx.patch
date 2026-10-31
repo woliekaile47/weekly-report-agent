@@ -1,0 +1,7 @@
+--- deer-flow/frontend/src/components/ui/input.tsx
++++ adapted/frontend/src/components/ui/input.tsx
+@@ -1,3 +1,4 @@
++// DeerFlow e0f5483, MIT. See third_party/licenses/deer-flow-MIT.txt.
+ import * as React from "react";
+ 
+ import { cn } from "@/lib/utils";

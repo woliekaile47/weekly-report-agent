@@ -248,6 +248,69 @@ async def download(task_id: str, kind: str):
     return FileResponse(path, filename=path.name)
 
 
+INPUT_LABELS = {"sales": "销售明细", "minutes": "周会纪要", "master": "基础资料"}
+
+
+@app.get("/api/runs/{task_id}/files")
+async def files(task_id: str):
+    """Expose only files owned by this checkpoint, not an arbitrary directory listing."""
+    state = await get_state(task_id)
+    items = []
+    for role, label in INPUT_LABELS.items():
+        relative = state.get("inputs", {}).get(role)
+        if not relative:
+            continue
+        path = task_path(task_id, relative)
+        if path.is_file():
+            items.append(
+                {
+                    "id": role,
+                    "name": label + path.suffix,
+                    "bytes": path.stat().st_size,
+                    "kind": "input",
+                    "url": f"/api/runs/{task_id}/input/{role}",
+                }
+            )
+    artifact = state.get("artifact") or {}
+    if artifact.get("file"):
+        for kind, suffix in (("docx", ".docx"), ("pdf", ".pdf")):
+            path = task_path(task_id, artifact["file"]).with_suffix(suffix)
+            if path.is_file():
+                items.append(
+                    {
+                        "id": kind,
+                        "name": "经营周报" + suffix,
+                        "bytes": path.stat().st_size,
+                        "kind": "artifact",
+                        "url": f"/api/runs/{task_id}/download/{kind}",
+                    }
+                )
+    if state["status"] == "completed" and state.get("delivery"):
+        path = task_path(task_id, state["delivery"])
+        if path.is_file():
+            items.append(
+                {
+                    "id": "package",
+                    "name": "正式交付包.zip",
+                    "bytes": path.stat().st_size,
+                    "kind": "artifact",
+                    "url": f"/api/runs/{task_id}/download/package",
+                }
+            )
+    return {"files": items, "version": state["version"]}
+
+
+@app.get("/api/runs/{task_id}/input/{role}")
+async def download_input(task_id: str, role: str):
+    state = await get_state(task_id)
+    if role not in INPUT_LABELS or not state.get("inputs", {}).get(role):
+        raise HTTPException(404, "材料不存在")
+    path = task_path(task_id, state["inputs"][role])
+    if not path.is_file():
+        raise HTTPException(404, "材料文件不可用")
+    return FileResponse(path, filename=INPUT_LABELS[role] + path.suffix)
+
+
 @app.get("/api/config")
 def get_config():
     bundle = snapshot()

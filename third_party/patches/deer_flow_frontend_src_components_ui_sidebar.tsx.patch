@@ -1,0 +1,40 @@
+--- deer-flow/frontend/src/components/ui/sidebar.tsx
++++ adapted/frontend/src/components/ui/sidebar.tsx
+@@ -1,3 +1,4 @@
++// DeerFlow e0f5483, MIT. See third_party/licenses/deer-flow-MIT.txt.
+ "use client";
+ 
+ import * as React from "react";
+@@ -196,8 +197,8 @@
+           side={side}
+         >
+           <SheetHeader className="sr-only">
+-            <SheetTitle>Sidebar</SheetTitle>
+-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
++            <SheetTitle>工作空间导航</SheetTitle>
++            <SheetDescription>工作空间导航与最近任务。</SheetDescription>
+           </SheetHeader>
+           <div className="flex h-full w-full flex-col">{children}</div>
+         </SheetContent>
+@@ -274,7 +275,7 @@
+       {...props}
+     >
+       {open ? <PanelLeftCloseIcon /> : <PanelLeftOpenIcon />}
+-      <span className="sr-only">Toggle Sidebar</span>
++      <span className="sr-only">展开或收起侧栏</span>
+     </Button>
+   );
+ }
+@@ -286,10 +287,10 @@
+     <button
+       data-sidebar="rail"
+       data-slot="sidebar-rail"
+-      aria-label="Toggle Sidebar"
++      aria-label="展开或收起侧栏"
+       tabIndex={-1}
+       onClick={toggleSidebar}
+-      title="Toggle Sidebar"
++      title="展开或收起侧栏"
+       className={cn(
+         "hover:after:bg-sidebar-border absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear group-data-[side=left]:-right-4 group-data-[side=right]:left-0 after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] sm:flex",
+         "in-data-[side=left]:cursor-w-resize in-data-[side=right]:cursor-e-resize",

@@ -1,4 +1,4 @@
---- upstream/frontend/src/components/GraphView.tsx
+--- invoice/frontend/src/components/GraphView.tsx
 +++ adapted/frontend/src/components/GraphView.tsx
 @@ -1,4 +1,12 @@
 -import { Background, type Edge, Handle, type Node, Position, ReactFlow } from "@xyflow/react";

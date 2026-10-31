@@ -292,7 +292,7 @@
     "local_file": "frontend/src/components/workspace/workspace-sidebar.tsx",
     "reuse_kind": "layout_adaptation",
     "upstream_sha256": "fdc3592cde8c5b8a7fa6e27dda5c963fa0e408d1231ae2f5c2b08497b247a43b",
-    "adapted_sha256": "3b56a658720f44de267610a78ffa2a86bb045b9a748c0a026b154355773f96e1",
+    "adapted_sha256": "6a0d08ae544e691bf87a9a8e896bb647b70da0c759fae049b714b79057948542",
     "hash_normalization": "utf-8-lf"
   },
   {
@@ -322,7 +322,7 @@
     "local_file": "frontend/src/components/workspace/settings-dialog.tsx",
     "reuse_kind": "layout_adaptation",
     "upstream_sha256": "3ee39f967ae2809918cdbd6c0c217abef70a881fee7d46634d6670779bb67464",
-    "adapted_sha256": "82ac00328e0a292e789aab39c728c97bc2916c9643830795f85510acc9d984bc",
+    "adapted_sha256": "5160ad250a0dfc0bb0bb31ce9d878258f111bb3de8f05591bdb98df72dd1111b",
     "hash_normalization": "utf-8-lf"
   },
   {

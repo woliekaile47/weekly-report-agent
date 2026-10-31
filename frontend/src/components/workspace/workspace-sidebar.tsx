@@ -47,6 +47,7 @@ import {
 import { STATUS } from "@/components/ui";
 import { useSettingsDialog, type SettingsSection } from "./settings-context";
 import { WorkspaceSidebarTrigger } from "./workspace-sidebar-trigger";
+import { ProjectBrand } from "./project-brand";
 
 export function WorkspaceSidebar() {
   const { pathname } = useLocation();
@@ -94,18 +95,22 @@ export function WorkspaceSidebar() {
           <div className="group/workspace-header flex h-12 flex-col justify-center">
             {expanded ? (
               <div className="flex items-center justify-between gap-2">
-                <Link to="/" className="text-primary ml-2 font-serif text-lg">
-                  DeerFlow
+                <Link
+                  to="/"
+                  aria-label="经营周报 · 新建任务"
+                  className="text-primary ml-1 flex min-w-0 items-center text-base"
+                >
+                  <ProjectBrand />
                 </Link>
                 <WorkspaceSidebarTrigger />
               </div>
             ) : (
               <Link
                 to="/"
-                aria-label="新建任务"
-                className="text-primary block text-center font-serif"
+                aria-label="经营周报 · 新建任务"
+                className="text-primary flex items-center justify-center"
               >
-                DF
+                <ProjectBrand compact />
               </Link>
             )}
           </div>

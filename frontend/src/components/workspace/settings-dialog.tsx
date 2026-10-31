@@ -16,6 +16,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Configuration } from "@/pages/Configuration";
 import { cn } from "@/lib/utils";
 import type { SettingsSection } from "./settings-context";
+import { ProjectBrand } from "./project-brand";
 
 const sections = [
   { id: "models", label: "模型连接", icon: BotIcon },
@@ -94,7 +95,9 @@ export function SettingsDialog({
               ) : (
                 <div className="space-y-5 text-sm leading-7">
                   <div>
-                    <h2 className="font-serif text-2xl">DeerFlow</h2>
+                    <h2 className="text-xl">
+                      <ProjectBrand />
+                    </h2>
                     <p className="text-muted-foreground">经营周报工作空间</p>
                   </div>
                   <p>

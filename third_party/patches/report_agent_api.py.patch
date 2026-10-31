@@ -1,0 +1,660 @@
+--- upstream/backend/app/api/routers/runs.py
++++ report_agent/api.py
+@@ -1,262 +1,224 @@
+-"""REST + SSE API for starting, streaming, resuming, and listing document
+-audit runs.
+-
+-Concurrency model (intentionally simple for a tutorial app): each active run
+-gets one `asyncio.Queue` in `request.app.state.run_queues`, fed by a
+-background `asyncio.Task` that drives `graph.astream(...)`. The SSE endpoint
+-just relays whatever lands on that queue. Every event is also persisted to
+-the `runs` table as it happens, so a client that reconnects (or a run that
+-finished while nobody was watching) can still be inspected via
+-`GET /runs/{id}` / replayed via `GET /runs/{id}/stream`.
++"""REST/background/SSE adapter derived from invoice assistant runs.py (a0a0fc5, MIT).
++
++Changes: local SQLite instead of Postgres/SQLAlchemy; durable cursor replay instead
++of a single-consumer queue; strict report-version guards; no demo/auto-approval API.
+ """
+-from __future__ import annotations
+ 
+ import asyncio
+ import json
+-import logging
+-import uuid
+-from datetime import datetime, timezone
+-from typing import Any
+-
+-from fastapi import APIRouter, HTTPException, Request
+-from fastapi.responses import StreamingResponse
+-from langgraph.types import Command
+-from sqlalchemy import select
+-
+-from app.api.schemas import (
+-    HumanDecisionRequest,
+-    RunCreateResponse,
+-    RunDetail,
+-    RunListResponse,
+-    RunSummary,
+-)
+-from app.db.models import Run
+-from app.db.session import SessionLocal
+-from app.graph.nodes import EXTRACTED_FIELD_KEYS
+-
+-logger = logging.getLogger(__name__)
+-router = APIRouter(prefix="/runs", tags=["runs"])
+-
+-
+-def _sse(event_type: str, data: dict[str, Any]) -> str:
+-    return f"event: {event_type}\ndata: {json.dumps(data, default=str)}\n\n"
+-
+-
+-def _extracted_fields_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+-    return {k: snapshot.get(k) for k in EXTRACTED_FIELD_KEYS if k in snapshot}
+-
+-
+-def _is_flagged(run: Run) -> bool:
+-    return any(
+-        item.get("severity") in {"warning", "error"}
+-        for item in [*run.validation_issues, *run.reconciliation_findings]
+-    )
+-
+-
+-def _is_duplicate(run: Run) -> bool:
+-    return any(f.get("code") == "duplicate_payment_suspected" for f in run.reconciliation_findings)
+-
+-
+-async def _run_graph(request: Request, thread_id: str, graph_input: Any) -> None:
+-    """Background task: drive the graph, persist + broadcast each step."""
+-    graph = request.app.state.graph
+-    queue: asyncio.Queue = request.app.state.run_queues[thread_id]
+-    config = {"configurable": {"thread_id": thread_id}}
+-
+-    def _set_status(status: str, **extra: Any) -> None:
+-        with SessionLocal() as db:
+-            run = db.get(Run, thread_id)
+-            if run is None:
+-                return
+-            run.status = status
+-            for k, v in extra.items():
+-                setattr(run, k, v)
+-            db.commit()
+-
+-    def _record_event(node_output: dict[str, Any]) -> None:
+-        trace_items = node_output.get("trace", [])
+-        with SessionLocal() as db:
+-            run = db.get(Run, thread_id)
+-            if run is None:
+-                return
+-            run.trace = [*run.trace, *trace_items]
+-            merged_snapshot = {**run.state_snapshot, **{k: v for k, v in node_output.items() if k != "trace"}}
+-            run.state_snapshot = merged_snapshot
+-            run.doc_type = merged_snapshot.get("doc_type", run.doc_type)
+-            run.extracted_fields = _extracted_fields_from_snapshot(merged_snapshot)
+-            if "validation_issues" in node_output:
+-                run.validation_issues = node_output["validation_issues"]
+-            if "reconciliation_findings" in node_output:
+-                run.reconciliation_findings = node_output["reconciliation_findings"]
+-            db.commit()
+-
++from pathlib import Path
++from urllib.parse import urlsplit
++
++import httpx
++from dotenv import set_key
++from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
++from fastapi.responses import FileResponse, StreamingResponse
++from fastapi.staticfiles import StaticFiles
++from pydantic import BaseModel
++
++from report_agent.config import ROOT, connection, snapshot
++from report_agent.models import Review, TaskSpec, WorkflowError
++from report_agent.service import Service
++from report_agent.store import task_path
++
++app = FastAPI(title="经营周报员工", version="2.0")
++service = Service()
++tasks = {}
++
++
++def _sse(event_type, data, seq=None):
++    return (
++        f"id: {seq}\n" if seq is not None else ""
++    ) + f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
++
++
++def public(state):
++    return {k: v for k, v in state.items() if k not in {"bundle"}} | {
++        "limits": state["bundle"]["employee"]["limits"],
++        "config_version": state["bundle"]["version"],
++        "model": connection()["LLM_MODEL"],
++        "worker_active": state["task_id"] in tasks and not tasks[state["task_id"]].done(),
++    }
++
++
++async def get_state(task_id):
+     try:
+-        _set_status("running")
+-        async for event in graph.astream(graph_input, config=config, stream_mode="updates"):
+-            if "__interrupt__" in event:
+-                interrupt_obj = event["__interrupt__"][0]
+-                payload = dict(interrupt_obj.value)
+-                with SessionLocal() as db:
+-                    run = db.get(Run, thread_id)
+-                    if run is not None:
+-                        run.status = "awaiting_human"
+-                        run.state_snapshot = {**run.state_snapshot, "interrupt": payload}
+-                        db.commit()
+-                await queue.put(_sse("interrupt", payload))
+-                continue
+-
+-            for node_name, node_output in event.items():
+-                if not isinstance(node_output, dict):
+-                    continue
+-                _record_event(node_output)
+-                await queue.put(
+-                    _sse(
++        return await service.state(task_id)
++    except (ValueError, WorkflowError) as exc:
++        raise HTTPException(404, str(exc)) from exc
++
++
++def start(task_id, **kwargs):
++    if task_id in tasks and not tasks[task_id].done():
++        raise HTTPException(409, "任务正在执行")
++
++    async def worker():
++        try:
++            await service.operate(task_id, **kwargs)
++        except Exception as exc:
++            message = (
++                str(exc)
++                if isinstance(exc, (WorkflowError, ValueError))
++                else f"执行进程中断（{type(exc).__name__}），可从已保存检查点继续"
++            )
++            service.store.event(task_id, "worker_error", {"message": message})
++
++    tasks[task_id] = asyncio.create_task(worker())
++
++
++@app.get("/api/health")
++def health():
++    return {"status": "ok", "version": "2.0"}
++
++
++@app.get("/api/runs")
++def list_runs():
++    return {"runs": service.store.list()}
++
++
++@app.post("/api/runs")
++async def create(
++    spec: str = Form(...),
++    sales: UploadFile | None = File(None),
++    minutes: UploadFile | None = File(None),
++    master: UploadFile | None = File(None),
++    import_options: str = Form("{}"),
++):
++    try:
++        values = {
++            role: (file.filename, await file.read())
++            for role, file in (("sales", sales), ("minutes", minutes), ("master", master))
++            if file
++        }
++        task_id = service.create(TaskSpec.model_validate_json(spec), values, json.loads(import_options))
++        start(task_id)
++        return {"id": task_id, "status": "pending"}
++    except (ValueError, WorkflowError) as exc:
++        raise HTTPException(422, str(exc)) from exc
++
++
++@app.get("/api/runs/{task_id}")
++async def detail(task_id: str):
++    return public(await get_state(task_id))
++
++
++@app.post("/api/runs/{task_id}/resume")
++async def resume(
++    task_id: str,
++    spec: str = Form(""),
++    import_options: str = Form(""),
++    handler: str = Form(""),
++    note: str = Form(""),
++    sales: UploadFile | None = File(None),
++    minutes: UploadFile | None = File(None),
++    master: UploadFile | None = File(None),
++):
++    state = await get_state(task_id)
++    if state["status"] not in {"paused", "running", "pending", "approved"}:
++        raise HTTPException(409, "当前状态不允许恢复")
++    if state.get("error_kind") == "budget" and (not handler.strip() or not note.strip()):
++        raise HTTPException(422, "超限恢复须填写处理人及意见")
++    try:
++        revised = TaskSpec.model_validate_json(spec).model_dump() if spec else None
++        options = json.loads(import_options) if import_options else None
++        files = {
++            role: (file.filename, await file.read())
++            for role, file in (("sales", sales), ("minutes", minutes), ("master", master))
++            if file
++        }
++        start(
++            task_id,
++            action="resume" if state["status"] == "paused" else "run",
++            spec=revised,
++            import_options=options,
++            handler=handler,
++            note=note,
++            files=files,
++        )
++        return {"id": task_id, "status": "running"}
++    except (ValueError, WorkflowError) as exc:
++        raise HTTPException(422, str(exc)) from exc
++
++
++@app.post("/api/runs/{task_id}/review")
++async def review(task_id: str, decision: Review):
++    state = await get_state(task_id)
++    if state["status"] != "awaiting_human" or decision.version != state["version"]:
++        raise HTTPException(409, "任务不在待审核状态或版本过期")
++    if not state["quality"]["passed"]:
++        raise HTTPException(409, "质检未通过")
++    from report_agent.documents import sha256
++
++    if (
++        decision.decision == "approve"
++        and sha256(task_path(task_id, state["artifact"]["file"])) != state["artifact"]["sha256"]
++    ):
++        raise HTTPException(409, "报告已改变，请退回重新生成")
++    start(task_id, action="review", review=decision.model_dump())
++    return {"id": task_id, "status": "running"}
++
++
++@app.post("/api/runs/{task_id}/recheck")
++async def recheck(task_id: str):
++    state = await get_state(task_id)
++    if (
++        state["status"] not in {"paused", "awaiting_human"}
++        or not state.get("draft")
++        or state.get("error_kind") == "budget"
++    ):
++        raise HTTPException(409, "当前任务不可直接复检；超限请填写处理记录后恢复")
++    start(task_id, action="recheck", note="用户明确复检现有草稿，不调用模型")
++    return {"id": task_id, "status": "running"}
++
++
++@app.get("/api/runs/{task_id}/events")
++async def events(task_id: str, after: int = 0):
++    await get_state(task_id)
++    return {"events": service.store.events(task_id, after)}
++
++
++@app.get("/api/runs/{task_id}/stream")
++async def stream(task_id: str, request: Request):
++    await get_state(task_id)
++
++    async def event_source():
++        cursor = int(request.headers.get("last-event-id", "0"))
++        state = await get_state(task_id)
++        yield _sse(
++            "replay",
++            {"status": state["status"], "state_snapshot": public(state), "trace": [], "final_status": None},
++        )
++        while not await request.is_disconnected():
++            batch = service.store.events(task_id, cursor)
++            for e in batch:
++                cursor = e["seq"]
++                yield _sse("audit", e, cursor)
++                if e["kind"] == "node":
++                    state = await get_state(task_id)
++                    yield _sse(
+                         "node",
+                         {
+-                            "node": node_name,
+-                            "output": {k: v for k, v in node_output.items() if k != "trace"},
+-                            "trace": node_output.get("trace", []),
++                            "node": e["payload"]["node"],
++                            "output": public(state),
++                            "trace": [
++                                {
++                                    "node": e["payload"]["node"],
++                                    "timestamp": e["time"],
++                                    "summary": e["payload"]["status"],
++                                }
++                            ],
+                         },
+                     )
+-                )
+-                if node_name != "human_review":
+-                    _set_status("running")
+-
+-        # Loop ended without an interrupt -> graph ran to completion (END).
+-        state = await graph.aget_state(config)
+-        if not state.next:  # no pending nodes => finished
+-            values = state.values
+-            status = values.get("status", "completed")
+-            final_status = values.get("final_status")
+-            with SessionLocal() as db:
+-                run = db.get(Run, thread_id)
+-                if run is not None:
+-                    run.status = status
+-                    run.final_status = final_status
+-                    merged_snapshot = {**run.state_snapshot, **values}
+-                    run.state_snapshot = merged_snapshot
+-                    run.extracted_fields = _extracted_fields_from_snapshot(merged_snapshot)
+-                    run.validation_issues = values.get("validation_issues", run.validation_issues)
+-                    run.reconciliation_findings = values.get(
+-                        "reconciliation_findings", run.reconciliation_findings
+-                    )
+-                    db.commit()
+-            await queue.put(_sse("done", {"status": status, "final_status": final_status}))
+-    except Exception as exc:  # noqa: BLE001
+-        logger.exception("Run %s failed", thread_id)
+-        with SessionLocal() as db:
+-            run = db.get(Run, thread_id)
+-            if run is not None:
+-                run.status = "error"
+-                run.error = str(exc)
+-                db.commit()
+-        await queue.put(_sse("error", {"message": str(exc)}))
+-    finally:
+-        await queue.put(None)  # sentinel: close the SSE stream
+-
+-
+-def _start_background_run(request: Request, thread_id: str, graph_input: Any) -> None:
+-    queue: asyncio.Queue = asyncio.Queue()
+-    request.app.state.run_queues[thread_id] = queue
+-    task = asyncio.create_task(_run_graph(request, thread_id, graph_input))
+-    request.app.state.run_tasks[thread_id] = task
+-
+-
+-async def start_document_run(
+-    request: Request,
+-    *,
+-    file_path: str,
+-    original_filename: str,
+-    doc_type: str,
+-    run_id: str | None = None,
+-) -> RunCreateResponse:
+-    """Create a `Run` row and kick off the graph in the background. Shared
+-    by both the upload and run-a-sample-document endpoints in
+-    `app/api/routers/documents.py`."""
+-    run_id = run_id or str(uuid.uuid4())
+-    now = datetime.now(timezone.utc)
+-    with SessionLocal() as db:
+-        run = Run(
+-            id=run_id,
+-            original_filename=original_filename,
+-            doc_type=doc_type,
+-            status="pending",
+-            extracted_fields={},
+-            validation_issues=[],
+-            reconciliation_findings=[],
+-            trace=[],
+-            state_snapshot={},
+-            created_at=now,
+-            updated_at=now,
+-        )
+-        db.add(run)
+-        db.commit()
+-
+-    _start_background_run(
+-        request, run_id, {"file_path": file_path, "original_filename": original_filename}
+-    )
+-    return RunCreateResponse(id=run_id, status="pending", original_filename=original_filename, doc_type=doc_type)
+-
+-
+-@router.post("/{run_id}/resume", response_model=RunCreateResponse)
+-async def resume_run(run_id: str, body: HumanDecisionRequest, request: Request) -> RunCreateResponse:
+-    with SessionLocal() as db:
+-        run = db.get(Run, run_id)
+-        if run is None:
+-            raise HTTPException(404, "run not found")
+-        if run.status != "awaiting_human":
+-            raise HTTPException(409, f"run is not awaiting human review (status={run.status})")
+-        original_filename = run.original_filename
+-        doc_type = run.doc_type
+-
+-    _start_background_run(
+-        request,
+-        run_id,
+-        Command(
+-            resume={
+-                "decision": body.decision,
+-                "feedback": body.feedback,
+-                "corrected_fields": body.corrected_fields or {},
+-            }
+-        ),
+-    )
+-    return RunCreateResponse(id=run_id, status="running", original_filename=original_filename, doc_type=doc_type)
+-
+-
+-@router.get("/{run_id}/stream")
+-async def stream_run(run_id: str, request: Request) -> StreamingResponse:
+-    async def event_source():
+-        queue: asyncio.Queue | None = request.app.state.run_queues.get(run_id)
+-
+-        if queue is None:
+-            # No live background task (already finished, or the server was
+-            # restarted after this run reached a terminal/awaiting state).
+-            # Replay what's durably stored instead of streaming live.
+-            with SessionLocal() as db:
+-                run = db.get(Run, run_id)
+-            if run is None:
+-                yield _sse("error", {"message": "run not found"})
++            state = await get_state(task_id)
++            active = task_id in tasks and not tasks[task_id].done()
++            if not active:
++                if state["status"] == "awaiting_human":
++                    yield _sse("interrupt", {"kind": "review", "version": state["version"]})
++                yield _sse("done", {"status": state["status"], "final_status": None})
+                 return
+-            yield _sse(
+-                "replay",
+-                {
+-                    "status": run.status,
+-                    "trace": run.trace,
+-                    "state_snapshot": run.state_snapshot,
+-                    "final_status": run.final_status,
+-                },
+-            )
+-            if run.status == "awaiting_human":
+-                interrupt_payload = run.state_snapshot.get("interrupt", {})
+-                yield _sse("interrupt", interrupt_payload)
+-            yield _sse("done", {"status": run.status, "final_status": run.final_status})
+-            return
+-
+-        while True:
+-            item = await queue.get()
+-            if item is None:
+-                break
+-            yield item
++            if not batch:
++                yield ": heartbeat\n\n"
++            await asyncio.sleep(0.6)
+ 
+     return StreamingResponse(
+         event_source(),
+@@ -265,46 +227,140 @@
+     )
+ 
+ 
+-@router.get("", response_model=RunListResponse)
+-async def list_runs() -> RunListResponse:
+-    with SessionLocal() as db:
+-        rows = db.execute(select(Run).order_by(Run.created_at.desc())).scalars().all()
+-        return RunListResponse(
+-            runs=[
+-                RunSummary(
+-                    id=r.id,
+-                    original_filename=r.original_filename,
+-                    doc_type=r.doc_type,
+-                    status=r.status,
+-                    final_status=r.final_status,
+-                    flagged=_is_flagged(r),
+-                    is_duplicate=_is_duplicate(r),
+-                    created_at=r.created_at,
+-                    updated_at=r.updated_at,
+-                )
+-                for r in rows
+-            ]
+-        )
+-
+-
+-@router.get("/{run_id}", response_model=RunDetail)
+-async def get_run(run_id: str) -> RunDetail:
+-    with SessionLocal() as db:
+-        run = db.get(Run, run_id)
+-        if run is None:
+-            raise HTTPException(404, "run not found")
+-        return RunDetail(
+-            id=run.id,
+-            original_filename=run.original_filename,
+-            doc_type=run.doc_type,
+-            status=run.status,
+-            final_status=run.final_status,
+-            extracted_fields=run.extracted_fields,
+-            validation_issues=run.validation_issues,
+-            reconciliation_findings=run.reconciliation_findings,
+-            trace=run.trace,
+-            state_snapshot=run.state_snapshot,
+-            error=run.error,
+-            created_at=run.created_at,
+-            updated_at=run.updated_at,
+-        )
++@app.get("/api/runs/{task_id}/download/{kind}")
++async def download(task_id: str, kind: str):
++    state = await get_state(task_id)
++    if kind == "package":
++        if state["status"] != "completed":
++            raise HTTPException(409, "审核通过并交付后才可下载正式交付包")
++        file = state["delivery"]
++    elif kind in {"docx", "pdf"}:
++        if not state.get("artifact"):
++            raise HTTPException(404, "暂无成果")
++        file = state["artifact"]["file"]
++        if kind == "pdf":
++            file = str(Path(file).with_suffix(".pdf"))
++    else:
++        raise HTTPException(404, "未知文件")
++    path = task_path(task_id, file)
++    if not path.is_file():
++        raise HTTPException(404, "文件尚未生成")
++    return FileResponse(path, filename=path.name)
++
++
++@app.get("/api/config")
++def get_config():
++    bundle = snapshot()
++    c = connection()
++    return {
++        "files": bundle["files"],
++        "version": bundle["version"],
++        "employee": bundle["employee"],
++        "connection": {k: v for k, v in c.items() if k != "LLM_API_KEY"},
++        "key_configured": bool(c["LLM_API_KEY"]),
++    }
++
++
++class ConfigUpdate(BaseModel):
++    version: str
++    files: dict[str, str]
++
++
++@app.put("/api/config")
++def save_config(body: ConfigUpdate):
++    import yaml
++    from filelock import FileLock
++
++    with FileLock(ROOT / "config/edit.lock", timeout=3):
++        old = snapshot()
++        if old["version"] != body.version:
++            raise HTTPException(409, "配置已更新，请刷新再编辑")
++        if set(body.files) != set(old["files"]):
++            raise HTTPException(422, "只能修改已公开的配置文件")
++        try:
++            parsed = yaml.safe_load(body.files["config/employee.yaml"])
++            if any(type(v) is not int or v < 0 for v in parsed["limits"].values()):
++                raise ValueError()
++            yaml.safe_load(body.files["config/columns.yaml"])
++            for key in ["岗位职责", "工作步骤", "注意事项"]:
++                if f"## {key}" not in body.files["skills/weekly-report/SKILL.md"]:
++                    raise ValueError()
++            for name, content in body.files.items():
++                (ROOT / name).write_text(content, encoding="utf-8")
++            new = snapshot()
++        except Exception as exc:
++            for name, content in old["files"].items():
++                (ROOT / name).write_text(content, encoding="utf-8")
++            raise HTTPException(422, "配置格式无效，已还原") from exc
++    return {"version": new["version"]}
++
++
++class ConnectionUpdate(BaseModel):
++    base_url: str
++    model: str
++    api_key: str = ""
++    max_tokens: int = 6000
++    reasoning_effort: str = ""
++
++
++@app.put("/api/connection")
++def save_connection(body: ConnectionUpdate):
++    url = urlsplit(body.base_url)
++    current = connection()
++    if (
++        url.scheme not in {"http", "https"}
++        or not url.hostname
++        or url.username
++        or url.password
++        or url.query
++        or url.fragment
++        or not body.model.strip()
++        or not 128 <= body.max_tokens <= 32000
++        or body.reasoning_effort not in {"", "low", "medium", "high"}
++    ):
++        raise HTTPException(422, "接口地址或生成参数无效")
++    if url.netloc != urlsplit(current["LLM_BASE_URL"]).netloc and not body.api_key.strip():
++        raise HTTPException(422, "更换服务地址时请填写对应密钥")
++    values = {
++        "LLM_BASE_URL": body.base_url.rstrip("/"),
++        "LLM_MODEL": body.model.strip(),
++        "LLM_MAX_TOKENS": str(body.max_tokens),
++        "LLM_REASONING_EFFORT": body.reasoning_effort,
++    }
++    if body.api_key.strip():
++        values["LLM_API_KEY"] = body.api_key.strip()
++    for key, val in values.items():
++        set_key(str(ROOT / ".env"), key, val)
++    return {"saved": True}
++
++
++@app.post("/api/connection/test")
++async def test_connection():
++    c = connection()
++    try:
++        async with httpx.AsyncClient(timeout=15) as client:
++            r = await client.post(
++                c["LLM_BASE_URL"].rstrip("/") + "/chat/completions",
++                headers={"Authorization": "Bearer " + c["LLM_API_KEY"]},
++                json={
++                    "model": c["LLM_MODEL"],
++                    "messages": [{"role": "user", "content": "请只回复：连接正常"}],
++                    "max_tokens": 64,
++                },
++            )
++        return {
++            "ok": r.status_code == 200,
++            "status_code": r.status_code,
++            "message": "接口已返回响应" if r.status_code == 200 else "接口不可用，请检查额度、模型或网络",
++        }
++    except httpx.HTTPError:
++        return {"ok": False, "message": "连接超时或网络不可用；未自动重试"}
++
++
++dist = ROOT / "frontend/dist"
++if dist.exists():
++    app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
++
++    @app.get("/{path:path}")
++    def index(path: str):
++        return FileResponse(dist / "index.html")

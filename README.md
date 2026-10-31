@@ -1,128 +1,50 @@
 # 经营周报员工
 
-基于 **LangGraph + Agent Skills + MCP 官方 Python SDK + Agnes AI + promptfoo** 的本地数字员工。
-读取销售 Excel/CSV 与周会纪要，生成包含图表、指标和证据的 Word 周报；自动质检通过后进入人工审核，退回意见在同一任务内返工，审核通过后交付文件包。
+场景 A 的本地工作流型数字员工。复用开源项目的流程与前端组件，使用 LangGraph 编排、Agent Skills 岗位配置、MCP 官方 SDK 工具和 docxtpl 模板，生成可审核交付的 Word 周报。来源、许可证和改动见 [开源复用记录](THIRD_PARTY_NOTICES.md)。
 
 ## 启动
 
-Windows 安装 Python 3.12，双击 `start.bat`。首次会安装锁定依赖，随后打开：
+Windows 需要 Python 3.11+、Node.js、Microsoft Word（用于真实页数与 PDF 预览检查）。运行 `start.bat`；首次安装需要网络。浏览器访问 http://127.0.0.1:8501 。
 
-<http://127.0.0.1:8501>
-
-也可以在项目根目录运行：
+`.env` 保存在后端，已有模型连接会沿用；可在“设置与调试”修改，密钥不回传浏览器。公开示例在 `.env.example`，不得提交真实 `.env`。
 
 ```powershell
-py -3.12 -m venv .venv
+python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
 .\.venv\Scripts\python.exe -m pip install --no-deps -e .
-Copy-Item .env.example .env   # 仅在尚无 .env 时执行
-.\start.ps1
+npm.cmd ci --prefix frontend
+npm.cmd run build --prefix frontend
+.\.venv\Scripts\python.exe -m uvicorn report_agent.api:app --host 127.0.0.1 --port 8501
 ```
 
-配置本地 `.env`：
+## 完成一次任务
 
-```dotenv
-LLM_BASE_URL=https://apihub.agnes-ai.com/v1
-LLM_MODEL=agnes-3.0-flash
-LLM_API_KEY=填写自己的密钥
-DATA_DIR=runtime
-```
+1. 新建任务，选择 ISO 年/周，上传销售 Excel/CSV 与对应周纪要。支持多表 Excel；CSV 的门店、商品、目标来自配置的基础资料，也可额外上传工作簿。默认基础资料来自企业场景 A 数据包，无内置销售演示任务。
+2. 程序识别材料、按记录ID剔除相同重复上传、关联基础表，再计算实收、毛利率、目标达成率、外卖占比、前五单品及异常；冲突ID、无可用上期、缺材料等暂停并说明原因。
+3. 模型逐项分析超过阈值的区域、门店；Word 由业务模板生成，至少两张图表。程序检查结构、数字、证据、异常覆盖、图表、行动项、文件摘要和 Word 实际页数。
+4. 质检通过后下载草稿及排版预览，填写审核人，选择通过或退回修改。退回意见进入同任务下一版本，重新质检、重新送审。
+5. 当前版本通过人工审核后，下载包含正式 Word、质检、审核、完整原文、指标来源、配置与执行记录的 ZIP 交付包。
 
-`.env` 和运行数据已加入 `.gitignore`。密钥仅用于模型 HTTP 请求，不传给 MCP 工具进程，不写入任务状态、评测输出或事件记录。程序不会在真实模型失败时偷偷切换为模拟输出。
+缺材料、工具故障、限流或超限会保存进度；只有明确操作才恢复。超限必须填处理人和处理意见。服务重启后打开最近任务，从持久检查点继续；已完成的工具通过任务和参数缓存复用，不承诺外部副作用严格一次执行。
 
-Linux/macOS 可使用 Python 3.12 创建 `.venv` 并安装依赖，然后执行 `.venv/bin/python -m streamlit run app.py --server.address 127.0.0.1`。图表需要可用的中文字体，如 Noto Sans CJK SC。当前主要验证环境为 Windows。
+## 业务配置
 
-## 创建实际业务任务
+- `skills/weekly-report/SKILL.md`：岗位职责、工作步骤、注意事项与写作要求。
+- `config/employee.yaml`：工具许可、模型预算、阈值、质检、限制理由。
+- `config/columns.yaml`：销售字段和基础表别名。
+- `config/reference/*.csv`：企业提供的基础资料，仅用于赛事配置；不含销售流水。
+- `templates/weekly-report.docx`：首次生成后可用 Word 编辑的 docxtpl 模板。
 
-1. 新建任务，选择与实际资料对应的统计周期（页面默认上一个完整自然周）。
-2. 上传自己的销售 Excel/CSV 和周会纪要，并填写重点关注的问题。应用只调用 Agnes 模型，不提供模拟样例或离线生成入口。
-3. 执行后查看指标、图表、纪要引用、Word 文件与质检记录。
-4. 填写审核人；需要修改时选择“退回修改”，写明对应问题与修改要求。
-5. 查看第二版修改说明及新的质检结果。通过当前版本后下载完整交付包。
+工作台“员工配置”可以修改文本配置。新任务保存创建时快照，已有任务保持原岗位配置。流程权限、非法状态拒绝和审核校验由程序执行。
 
-缺少材料时任务暂停并提示补充；模型或网络故障时有限重试后暂停，不生成替代报告。历史开发样例已从业务列表归档，原文件仅保留供追溯；已有实际业务任务不受影响。
+## 验证
 
-命令行也支持恢复与审核：
-
-```powershell
-.\.venv\Scripts\python.exe -m weekly_report.cli create --title "门店经营周报" --start <开始日期> --end <结束日期> --sales <销售文件路径> --minutes <纪要文件路径>
-.\.venv\Scripts\python.exe -m weekly_report.cli state <任务ID>
-.\.venv\Scripts\python.exe -m weekly_report.cli review <任务ID> reject --version 1 --reviewer 张三 --feedback "请补充华东区原因"
-.\.venv\Scripts\python.exe -m weekly_report.cli review <任务ID> approve --version 2 --reviewer 张三
-.\.venv\Scripts\python.exe -m weekly_report.cli resume <任务ID> --sales <补充销售文件路径> --minutes <补充纪要文件路径>
-```
-
-命令行同样必须显式审核当前版本，不提供自动审核或演示命令。恢复时可以省略无需替换的附件参数。
-
-## 输入约定
-
-销售文件支持 `.xlsx` 和 `.csv`，必需列为 `日期、门店、区域、品类、销售额`，也支持 `date、store、region、category、amount`。列名映射可在 `config/employee.yaml` 调整。Excel 读取第一个工作表；CSV 支持 UTF-8 和 GB18030。
-
-周会纪要支持 `.docx`、UTF-8 `.txt`、`.md`。每份上传文件最多 20 MB；销售明细最多十万行；纪要最多六万字符。统计周期为一至三十一天，默认需要环比，比较期是紧邻本期的前一个同长度周期。
-
-销售额以元输入，程序转换为整数分计算；负数视为退货或冲减。无上期记录与上期金额为零分开处理。疑似重复明细保留并提示核实。分组没有记录不等于零销售。所有分析仅覆盖上传数据范围。
-
-## 工程结构
-
-```text
-app.py                       本地操作界面
-weekly_report/
-  graph.py                   LangGraph 状态、暂停、审核、返工与交付
-  service.py                 任务入口、互斥锁、输入版本、审核守卫
-  mcp_server.py              官方 SDK 实现的六个工具
-  mcp_client.py              MCP 会话、工具白名单、重试与缓存
-  analysis.py                数据读取与确定性指标计算
-  model.py                   Agnes 真实模型接入
-  report.py                  图表、Word 和自动质检
-  store.py                   SQLite 审计、缓存、路径校验
-config/employee.yaml         工具许可、限制、质检与字段映射
-skills/weekly-report/        Agent Skills 岗位配置与参考资料
-tests/                      程序、故障恢复与界面测试
-  fixtures/                 仅供测试使用的虚构资料，不提供给业务界面
-  fakes.py                  仅供测试注入的模型替身，业务应用不导入
-evals/                      promptfoo 工作流测评与真实模型测评
-docs/                       架构、技术报告、验证与业务验收说明
-runtime/                    本地状态、输入与交付文件，不入 Git
-```
-
-## 配置与质量控制
-
-员工职责、步骤、分析原则在 `skills/weekly-report/SKILL.md`；指标口径和报告要求在对应 `references/`、`assets/`。每个新任务保存完整员工配置快照和版本摘要，避免正在审核的任务受到配置改动影响。修改配置后请创建新任务。
-
-程序负责关键控制：工具白名单、状态流转、预算、质检和当前版本审批，模型仅生成结构化分析。图的执行顺序由程序固定，工具调用走真实 MCP 协议，不依赖模型是否支持原生 Function Calling。
-
-默认限制：每轮最多十二次模型请求，单次请求六十秒，活动执行累计六百秒，工具最多重试两次，模型执行错误最多重试两次，质检最多修正两轮。人工等待不计时；人工明确恢复或退回修改后开启新一轮预算，完整历史不清空。模型请求开始前持久化记录，进程中断的请求同样消耗轮次预算。
-
-质检包括章节、字数、数值引用和表格、证据原文、图表文件、禁用词、退回意见响应。确定性检查能验证引用存在和原文匹配，不能证明业务因果成立或意见已充分落实；最终由人工审核判断。
-
-## 测试和测评
-
-Python 测试与检查：
+将 `PUBLIC_DATA_DIR` 指向企业场景 A 解压目录，然后运行：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\ruff.exe check report_agent tests
+.\eval.ps1
 ```
 
-promptfoo 需要 Node.js 22 或更新版本，首次运行安装锁定的 npm 依赖：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\eval.ps1
-powershell -ExecutionPolicy Bypass -File .\eval.ps1 -Live
-```
-
-离线测评只在独立测试目录运行真实 LangGraph、SQLite、MCP 子进程、图表与 Word 工具，通过测试代码替换模型输出；产品本身不含离线模式。真实测评调用 `agnes-3.0-flash`，覆盖正常分析、审核退回和纪要指令干扰。测试过程中的审核决定由测试驱动模拟，业务应用不会自动审批。测评使用 tests/fixtures 中的虚构资料，不能作为实际经营结论。结果写入 `evals/results/`；运行 `npm run eval:view` 可查看 promptfoo 结果。
-
-## 断点恢复与交付
-
-每个任务使用独立 `thread_id`；SQLite 保存 LangGraph 检查点，工具按任务、参数和技能版本记录成功结果。重启后从历史任务点击继续；故障暂停后点击恢复。已经完成并记录的步骤不重复执行；如果进程恰好在外部调用完成但记录前退出，重放可能重新执行该调用，写文件工具通过确定路径和原子替换保持同一逻辑产物。
-
-交付包包含经营周报、历次质检、审核意见及批准记录、执行事件、文件摘要。审批绑定任务版本和 Word SHA-256，未经质检或内容在审核后发生变化不能交付。
-
-## 范围与限制
-
-当前为本地单用户应用，绑定回环地址；审核人姓名用于记录，尚未接企业登录与权限系统。运行数据包含业务材料，保存在本地 `runtime/`。不提供生产多租户、定时调度或在线协作。
-
-免费模型服务可能限流或不可用，程序按限制重试后暂停。硬退出时已完成检查点和模型请求次数能恢复；中断中的调用无法保证只执行一次，也无法完整还原其活动耗时。模型对原因的业务理解和建议质量仍需人工复核。
-
-企业公开样例尚未提供，当前模拟测试不能代表企业十五条盲测成绩。详见 `docs/verification.md`。
+pytest 的模型替身仅位于 `tests/`，不在产品入口提供演示或自动审批。真实模型运行、工程回归、企业判定点必须分别报告，详见 `docs/verification.md`。完整赛事验收还需人工审阅、企业盲测及现场变更。

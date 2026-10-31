@@ -1,0 +1,30 @@
+[
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/components/GraphView.tsx",
+    "local_file": "frontend/src/components/GraphView.tsx",
+    "upstream_sha256": "45fd51b8b31a9491515135a23458d7f8f0fc71a12706d11189fd2df5231b9b7b",
+    "adapted_sha256": "0ab2ecae29eda46dff6de41dadbc06238287a500c1181443d6e9407d967ee611"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/hooks/useRunStream.ts",
+    "local_file": "frontend/src/hooks/useRunStream.ts",
+    "upstream_sha256": "9a7f6f042360bc8fa06b3bc85fa5771b73727ef79cd603c1e0347d99c3bf5b5a",
+    "adapted_sha256": "6deeda3e559ccb2ce227d622e6ab5d1c3a37bf05bf550569ab283038f613c5ec"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "backend/app/graph/graph.py",
+    "local_file": "report_agent/workflow.py",
+    "upstream_sha256": "396a464372d4149c9d26214313e24bdc2c3e6e0b161aced1cd4359ed8e62e659",
+    "adapted_sha256": "2fa8b2a08b4c84846b5c5141bc33831bc0dda96d8b4d0b798a19905dc812539f"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "backend/app/api/routers/runs.py",
+    "local_file": "report_agent/api.py",
+    "upstream_sha256": "b9b3aed426c5bfbd307dcc0581f4d98b4daf30f3ce2d2114063c00f189238c75",
+    "adapted_sha256": "ce0ec728c8569ad3df0b9656ce639f3abfd90f94da29baa8986ddf6495322f1f"
+  }
+]

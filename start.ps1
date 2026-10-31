@@ -1,12 +1,12 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
-$taskPython = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
-if (-not (Test-Path -LiteralPath $taskPython)) {
-    py -3.12 -m venv .venv
-    if ($LASTEXITCODE -ne 0) { throw '请先安装 Python 3.12。' }
-    & $taskPython -m pip install -r requirements.lock.txt
-    if ($LASTEXITCODE -ne 0) { throw '依赖安装失败。' }
-    & $taskPython -m pip install --no-deps -e .
-}
-if (-not (Test-Path -LiteralPath '.env')) { Copy-Item -LiteralPath '.env.example' -Destination '.env' }
-& $taskPython -m streamlit run app.py --server.address 127.0.0.1 --server.port 8501 --browser.gatherUsageStats false
+if (-not (Test-Path -LiteralPath '.venv\Scripts\python.exe')) { python -m venv .venv }
+& .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
+if ($LASTEXITCODE -ne 0) { throw '锁定依赖安装失败' }
+& .\.venv\Scripts\python.exe -m pip install --no-deps -e .
+if ($LASTEXITCODE -ne 0) { throw 'Python 依赖安装失败' }
+if (-not (Test-Path -LiteralPath 'frontend\node_modules')) { npm.cmd ci --prefix frontend --no-fund --no-audit }
+if ($LASTEXITCODE -ne 0) { throw '前端依赖安装失败' }
+npm.cmd run build --prefix frontend
+if ($LASTEXITCODE -ne 0) { throw '前端构建失败' }
+& .\.venv\Scripts\python.exe -m uvicorn report_agent.api:app --host 127.0.0.1 --port 8501

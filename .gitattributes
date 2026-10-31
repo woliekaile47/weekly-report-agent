@@ -1,0 +1,9 @@
+* text=auto
+*.pdf binary
+*.docx binary
+*.mp4 binary
+*.webm binary
+*.png binary
+*.jpg binary
+# Unified patches intentionally retain space-prefixed context lines.
+third_party/patches/*.patch -whitespace

@@ -1,0 +1,486 @@
+--- upstream/backend/app/graph/graph.py
++++ report_agent/workflow.py
+@@ -1,63 +1,426 @@
+-"""Assembles the LangGraph `StateGraph` for the Invoice & Receipt Audit /
+-Reconciliation Assistant.
+-
+-    START -> ingest --ledger--> finalize -> END
+-                |
+-          invoice/receipt
+-                v
+-          extract_fields -> validate -> reconcile -> human_review -> finalize -> END
+-
+-The only branch point is right after `ingest`: a general-ledger upload is
+-parsed and loaded straight into Postgres deterministically (nothing to
+-extract, validate, or have a human review), while an invoice or receipt
+-goes through the full extract -> validate -> reconcile -> human_review
+-pipeline. `human_review`'s `interrupt()` is the other load-bearing piece of
+-control flow here -- see `app/graph/nodes.py::human_review_node`.
++"""Adapted from manuelbomi/Invoice-Receipt-Audit... graph.py and nodes.py (a0a0fc5, MIT).
++
++Original explicit StateGraph + mandatory interrupt gate retained. Scenario nodes,
++bounded repair/rework, illegal-transition rejection and persistent budgets added.
++GenSlide's approve/revise routing is adapted to a strict versioned approval gate.
+ """
++
+ from __future__ import annotations
+ 
+-from langgraph.checkpoint.base import BaseCheckpointSaver
++import asyncio
++import time
++import uuid
++import zipfile
++from typing import TypedDict
++
+ from langgraph.graph import END, START, StateGraph
+-
+-from app.graph.nodes import (
+-    extract_fields_node,
+-    finalize_node,
+-    human_review_node,
+-    ingest_node,
+-    reconcile_node,
+-    route_after_ingest,
+-    validate_node,
+-)
+-from app.graph.state import AuditState
+-
+-
+-def build_graph(checkpointer: BaseCheckpointSaver | None = None):
+-    """Build (and optionally compile-with-checkpointer) the audit graph.
+-
+-    Pass `checkpointer=None` to get an uncompiled-but-still-runnable graph
+-    with LangGraph's default in-memory checkpointing (handy for unit tests
+-    that don't need durability/interrupts across processes). Pass a real
+-    `AsyncPostgresSaver` in the FastAPI app for durable, resumable runs.
+-    """
+-    builder = StateGraph(AuditState)
+-
+-    builder.add_node("ingest", ingest_node)
+-    builder.add_node("extract_fields", extract_fields_node)
+-    builder.add_node("validate", validate_node)
+-    builder.add_node("reconcile", reconcile_node)
+-    builder.add_node("human_review", human_review_node)
+-    builder.add_node("finalize", finalize_node)
+-
++from langgraph.types import interrupt
++
++from report_agent.documents import sha256
++from report_agent.model import generate, ground_dates
++from report_agent.models import Review, WorkflowError
++from report_agent.store import atomic_json, task_path
++
++
++class ReportState(TypedDict, total=False):
++    task_id: str
++    spec: dict
++    bundle: dict
++    inputs: dict
++    import_options: dict
++    status: str
++    route: str
++    current_node: str
++    resume_node: str
++    reason: str
++    error_kind: str
++    sales: dict
++    metrics: dict
++    minutes: dict
++    draft: dict
++    artifact: dict
++    quality: dict
++    quality_history: list
++    feedback: list
++    approval: dict
++    version: int
++    repairs: int
++    model_calls: int
++    model_failures: int
++    budget_id: str
++    active_seconds: float
++    delivery: str
++
++
++def build_graph(store, gateway, checkpointer, model=generate):
++    def wrap(name, fn):
++        async def node(state):
++            started = time.monotonic()
++            limits = state["bundle"]["employee"]["limits"]
++            store.event(state["task_id"], "node_started", {"node": name, "version": state["version"]})
++            try:
++                if state.get("status") not in {"pending", "running", "approved"}:
++                    raise WorkflowError("非法状态，拒绝继续执行", "transition")
++                remaining = limits["active_seconds"] - state.get("active_seconds", 0)
++                if remaining <= 0:
++                    raise WorkflowError("活动执行时长达到上限，已暂停转人工处理", "budget")
++                update = await asyncio.wait_for(fn(state), timeout=remaining)
++            except Exception as exc:
++                if isinstance(exc, asyncio.TimeoutError):
++                    exc = WorkflowError("活动执行时长达到上限，已暂停转人工处理", "budget")
++                error = (
++                    exc
++                    if isinstance(exc, WorkflowError)
++                    else WorkflowError(f"步骤 {name} 失败（{type(exc).__name__}），已保存进度")
++                )
++                update = {
++                    "status": "paused",
++                    "route": "pause",
++                    "resume_node": name,
++                    "reason": str(error),
++                    "error_kind": error.kind,
++                }
++                if name == "analyze" and error.kind == "model":
++                    failures = state.get("model_failures", 0) + 1
++                    update["model_failures"] = failures
++                    if failures <= limits["tool_retries"]:
++                        update.update(status="running", route="analyze")
++                store.event(
++                    state["task_id"], "node_failed", {"node": name, "message": str(error), "kind": error.kind}
++                )
++            elapsed = state.get("active_seconds", 0) + time.monotonic() - started
++            calls = sum(
++                e["kind"] == "model_started" and e["payload"].get("budget_id") == state["budget_id"]
++                for e in store.events(state["task_id"])
++            )
++            update.update(active_seconds=elapsed, model_calls=calls, current_node=name)
++            store.event(
++                state["task_id"],
++                "node_completed",
++                {"node": name, "status": update.get("status", state["status"]), "version": state["version"]},
++            )
++            return update
++
++        return node
++
++    async def ingest(s):
++        if not s["inputs"].get("sales"):
++            raise WorkflowError("缺少销售明细，请补充 Excel 或 CSV", "materials")
++        result = await gateway.call(
++            "read_sales",
++            {
++                "task_id": s["task_id"],
++                "file": s["inputs"]["sales"],
++                "columns": s["bundle"]["columns"],
++                "options": s.get("import_options", {}),
++                "master_file": s["inputs"].get("master", ""),
++            },
++        )
++        return {"sales": result, "status": "running", "route": "calculate"}
++
++    async def calculate(s):
++        business = s["bundle"]["employee"]["business"]
++        metrics = await gateway.call(
++            "compute_metrics",
++            {
++                "task_id": s["task_id"],
++                "sales": s["sales"],
++                "spec": s["spec"],
++                "threshold": business["anomaly_percent"],
++                "delivery_channel": s["bundle"]["columns"]["delivery_channel"],
++                "margin_drop_points": business.get("margin_drop_points", 5),
++            },
++        )
++        return {"metrics": metrics, "route": "evidence"}
++
++    async def evidence(s):
++        if not s["inputs"].get("minutes"):
++            raise WorkflowError("缺少本周周会纪要，请补充后继续", "materials")
++        minutes = await gateway.call(
++            "read_minutes", {"task_id": s["task_id"], "file": s["inputs"]["minutes"]}
++        )
++        if minutes["week"] and minutes["week"] != s["spec"]["week"]:
++            raise WorkflowError(
++                f"纪要为第 {minutes['week']} 周，任务是第 {s['spec']['week']} 周，请修正周期或替换纪要",
++                "materials",
++            )
++        metrics = dict(s["metrics"])
++        business = s["bundle"]["employee"]["business"]
++        conflicts = []
++        for g in metrics["groups"]:
++            if g["dimension"] != "region" or g["change"] is None:
++                continue
++            for source in minutes["sources"]:
++                if (
++                    g["label"] in source["text"]
++                    and any(p in source["text"] for p in business["flat_phrases"])
++                    and abs(g["change"]) > business["flat_tolerance_percent"]
++                ):
++                    conflicts.append(
++                        {
++                            "region": g["label"],
++                            "metric_id": g["id"],
++                            "source_id": source["id"],
++                            "claim": source["text"],
++                            "instruction": "指出纪要与系统环比不一致，以数据为准",
++                        }
++                    )
++        metrics["expected_conflicts"] = conflicts
++        return {"minutes": minutes, "metrics": metrics, "route": "analyze"}
++
++    async def analyze(s):
++        draft = await model(s, store)
++        return {"draft": draft, "model_failures": 0, "route": "render"}
++
++    async def render(s):
++        from datetime import date, timedelta
++
++        metrics = {**s["metrics"], "tokens": dict(s["metrics"]["tokens"])}
++        if "category_margins" not in metrics:
++            business = s["bundle"]["employee"]["business"]
++            refreshed = await gateway.call(
++                "compute_metrics",
++                {
++                    "task_id": s["task_id"],
++                    "sales": s["sales"],
++                    "spec": s["spec"],
++                    "threshold": business["anomaly_percent"],
++                    "delivery_channel": s["bundle"]["columns"]["delivery_channel"],
++                    "margin_drop_points": business.get("margin_drop_points", 5),
++                },
++            )
++            metrics = {**refreshed, "expected_conflicts": metrics.get("expected_conflicts", [])}
++        metrics["tokens"].setdefault("year", str(s["spec"]["year"]))
++        metrics["tokens"].setdefault(
++            "next_week",
++            f"第{(date.fromisocalendar(s['spec']['year'], s['spec']['week'], 1) + timedelta(days=7)).isocalendar().week}周",
++        )
++        s = {**s, "metrics": metrics}
++        s = {**s, "draft": ground_dates(s["draft"], s)}
++        artifact = await gateway.call(
++            "generate_report",
++            {k: s[k] for k in ("task_id", "version", "metrics", "minutes", "draft", "bundle", "feedback")},
++        )
++        return {"artifact": artifact, "draft": s["draft"], "metrics": metrics, "route": "quality"}
++
++    async def quality(s):
++        result = await gateway.call(
++            "inspect_report",
++            {k: s[k] for k in ("task_id", "artifact", "metrics", "minutes", "draft", "bundle", "feedback")},
++        )
++        result = await page_inspection(s, result)
++        history = s.get("quality_history", []) + [{"version": s["version"], **result}]
++        store.event(s["task_id"], "quality", result)
++        common = {"quality": result, "quality_history": history}
++        if result["passed"]:
++            return {
++                **common,
++                "status": "awaiting_human",
++                "route": "human_review",
++                "reason": "",
++                "error_kind": "",
++            }
++        if s.get("repairs", 0) < s["bundle"]["employee"]["limits"]["quality_repairs"]:
++            return {**common, "repairs": s.get("repairs", 0) + 1, "route": "analyze"}
++        return {
++            **common,
++            "status": "paused",
++            "route": "pause",
++            "resume_node": "analyze",
++            "reason": "质检修正达到上限仍未通过，请核实记录后人工处理",
++            "error_kind": "quality",
++        }
++
++    async def pause(s):
++        reply = interrupt({"kind": "pause", "reason": s["reason"], "node": s["resume_node"]})
++        update = {
++            "status": "approved" if s["resume_node"] == "finalize" else "running",
++            "route": s["resume_node"],
++            "reason": "",
++            "error_kind": "",
++            "budget_id": uuid.uuid4().hex,
++            "active_seconds": 0,
++            "model_calls": 0,
++            "repairs": 0,
++            "model_failures": 0,
++        }
++        changes = {}
++        if reply.get("recheck"):
++            update.update(
++                route="render",
++                version=s["version"] + 1,
++                repairs=s["bundle"]["employee"]["limits"]["quality_repairs"],
++            )
++        for key in ("spec", "import_options"):
++            if key in reply and reply[key] != s.get(key):
++                changes[key] = reply[key]
++        if reply.get("inputs") or changes:
++            update.update(
++                changes,
++                inputs={**s["inputs"], **reply.get("inputs", {})},
++                route="ingest",
++                status="running",
++                sales={},
++                metrics={},
++                minutes={},
++                draft={},
++                quality={},
++                artifact={},
++                approval={},
++                delivery="",
++                version=s["version"] + (1 if s.get("artifact") else 0),
++            )
++        store.event(
++            s["task_id"],
++            "resumed",
++            {
++                "handler": reply.get("handler", ""),
++                "note": reply.get("note", ""),
++                "changed": changes,
++                "inputs": list(reply.get("inputs", {})),
++                "previous_reason": s.get("reason"),
++                "previous_budget_id": s["budget_id"],
++            },
++        )
++        return update
++
++    async def human_review(s):
++        reply = interrupt(
++            {"kind": "review", "version": s["version"], "artifact": s["artifact"], "quality": s["quality"]}
++        )
++        if reply.get("recheck"):
++            store.event(
++                s["task_id"],
++                "recheck_requested",
++                {"previous_version": s["version"], "note": reply.get("note", "")},
++            )
++            return {
++                "status": "running",
++                "route": "render",
++                "version": s["version"] + 1,
++                "repairs": s["bundle"]["employee"]["limits"]["quality_repairs"],
++                "approval": {},
++                "budget_id": uuid.uuid4().hex,
++                "active_seconds": 0,
++                "model_calls": 0,
++            }
++        decision = Review.model_validate(reply).model_dump()
++        if decision["version"] != s["version"] or not s["quality"]["passed"]:
++            raise WorkflowError("审核版本过期或质检未通过", "transition")
++        store.event(s["task_id"], "human_review", decision)
++        if decision["decision"] == "revise":
++            return {
++                "status": "running",
++                "route": "analyze",
++                "feedback": s["feedback"] + [decision],
++                "version": s["version"] + 1,
++                "repairs": 0,
++                "budget_id": uuid.uuid4().hex,
++                "active_seconds": 0,
++                "model_calls": 0,
++                "model_failures": 0,
++                "approval": {},
++            }
++        return {
++            "status": "approved",
++            "route": "finalize",
++            "approval": {**decision, "sha256": s["artifact"]["sha256"]},
++            "budget_id": uuid.uuid4().hex,
++            "active_seconds": 0,
++            "model_calls": 0,
++        }
++
++    async def finalize(s):
++        artifact = s["artifact"]
++        path = task_path(s["task_id"], artifact["file"])
++        if (
++            not s["quality"]["passed"]
++            or s.get("approval", {}).get("decision") != "approve"
++            or s["approval"]["version"] != s["version"]
++            or s["approval"]["sha256"] != sha256(path)
++        ):
++            raise WorkflowError("当前成果与批准版本不一致，拒绝交付", "transition")
++        base = task_path(s["task_id"], f"delivery/v{s['version']}")
++        base.mkdir(parents=True, exist_ok=True)
++        atomic_json(base / "质检记录.json", s["quality_history"])
++        atomic_json(base / "审核记录.json", {"feedback": s["feedback"], "approval": s["approval"]})
++        atomic_json(base / "配置快照.json", s["bundle"])
++        atomic_json(base / "指标与材料来源.json", s["metrics"])
++        atomic_json(base / "完整纪要原文.json", s["minutes"])
++        atomic_json(base / "执行事件.json", store.events(s["task_id"]))
++        atomic_json(
++            base / "交付清单.json",
++            {
++                "task_id": s["task_id"],
++                "version": s["version"],
++                "report_sha256": artifact["sha256"],
++                "inputs": s["inputs"],
++            },
++        )
++        reasons = s["bundle"]["employee"]["limit_reasons"]
++        (base / "执行限制说明.md").write_text(
++            "# 执行限制与理由\n\n"
++            + "\n".join(
++                f"- {key}: {s['bundle']['employee']['limits'][key]}；{reason}"
++                for key, reason in reasons.items()
++            )
++            + "\n\n每次请求含失败计数。超限暂停并需处理人和意见；人工等待不计时，明确恢复后开启新预算。",
++            encoding="utf-8",
++        )
++        archive = base.parent / f"经营周报-v{s['version']}.zip"
++        tmp = archive.with_suffix(".tmp")
++        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
++            z.write(path, "经营周报.docx")
++            for p in sorted(base.iterdir()):
++                z.write(p, p.name)
++        tmp.replace(archive)
++        return {
++            "status": "completed",
++            "route": "end",
++            "delivery": str(archive.relative_to(task_path(s["task_id"]))).replace("\\", "/"),
++        }
++
++    builder = StateGraph(ReportState)
++    operations = {
++        "ingest": ingest,
++        "calculate": calculate,
++        "evidence": evidence,
++        "analyze": analyze,
++        "render": render,
++        "quality": quality,
++        "finalize": finalize,
++    }
++    for name, fn in operations.items():
++        builder.add_node(name, wrap(name, fn))
++    builder.add_node("pause", pause)
++    builder.add_node("human_review", human_review)
++    routes = {name: name for name in [*operations, "pause", "human_review"]}
++    routes["end"] = END
++    for name in [*operations, "pause", "human_review"]:
++        builder.add_conditional_edges(name, lambda state: state["route"], routes)
+     builder.add_edge(START, "ingest")
+-    builder.add_conditional_edges(
+-        "ingest",
+-        route_after_ingest,
+-        {"extract_fields": "extract_fields", "finalize": "finalize"},
++    return builder.compile(checkpointer=checkpointer)
++
++
++async def page_inspection(state, result):
++    from report_agent.render_worker import inspect_pages
++
++    audit = await inspect_pages(
++        task_path(state["task_id"], state["artifact"]["file"]),
++        state["bundle"]["employee"]["limits"]["tool_timeout_seconds"],
+     )
+-    builder.add_edge("extract_fields", "validate")
+-    builder.add_edge("validate", "reconcile")
+-    builder.add_edge("reconcile", "human_review")
+-    builder.add_edge("human_review", "finalize")
+-    builder.add_edge("finalize", END)
+-
+-    return builder.compile(checkpointer=checkpointer)
++    result = {
++        **result,
++        "checks": [
++            *result["checks"],
++            {
++                "name": "Word实际页数",
++                "passed": audit.get("pages", 999) <= state["bundle"]["employee"]["quality"]["max_pages"],
++                "details": audit.get("details", ""),
++            },
++        ],
++        "page_audit": audit,
++    }
++    result["passed"] = all(c["passed"] for c in result["checks"])
++    atomic_json(task_path(state["task_id"], state["artifact"]["file"]).parent / "quality.json", result)
++    return result

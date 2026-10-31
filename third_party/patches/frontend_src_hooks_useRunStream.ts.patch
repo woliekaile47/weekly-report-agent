@@ -1,0 +1,82 @@
+--- upstream/frontend/src/hooks/useRunStream.ts
++++ frontend/src/hooks/useRunStream.ts
+@@ -1,7 +1,14 @@
++// Adapted from invoice assistant a0a0fc5, MIT. Persistent replay and Chinese errors added.
+ import { useEffect, useState } from "react";
+ 
+ import { streamUrl } from "../api/client";
+-import type { GraphNodeName, InterruptPayload, RunStatus, StateSnapshot, TraceEventOut } from "../api/types";
++import type {
++  GraphNodeName,
++  InterruptPayload,
++  RunStatus,
++  StateSnapshot,
++  TraceEventOut,
++} from "../api/types";
+ 
+ export interface RunStreamState {
+   status: RunStatus | "connecting";
+@@ -33,7 +40,10 @@
+  * directly -- driving both the live GraphView highlighting and the
+  * extraction/validation/reconciliation output panels.
+  */
+-export function useRunStream(runId: string | null, generation = 0): RunStreamState {
++export function useRunStream(
++  runId: string | null,
++  generation = 0,
++): RunStreamState {
+   const [state, setState] = useState<RunStreamState>(INITIAL_STATE);
+ 
+   useEffect(() => {
+@@ -85,9 +95,12 @@
+         ...prev,
+         status: data.status,
+         finalStatus: data.final_status,
+-        currentNode: TERMINAL_STATUSES.has(data.status) ? "finalize" : prev.currentNode,
++        currentNode: TERMINAL_STATUSES.has(data.status)
++          ? "finalize"
++          : prev.currentNode,
+         completedNodes:
+-          TERMINAL_STATUSES.has(data.status) && !prev.completedNodes.includes("finalize")
++          TERMINAL_STATUSES.has(data.status) &&
++          !prev.completedNodes.includes("finalize")
+             ? [...prev.completedNodes, "finalize"]
+             : prev.completedNodes,
+       }));
+@@ -106,6 +119,10 @@
+         status: data.status,
+         trace: data.trace,
+         snapshot: data.state_snapshot,
++        currentNode:
++          data.state_snapshot.status === "paused"
++            ? (data.state_snapshot.resume_node ?? null)
++            : (data.state_snapshot.current_node ?? null),
+         finalStatus: data.final_status,
+       }));
+     });
+@@ -116,7 +133,11 @@
+       const data = (evt as MessageEvent).data;
+       if (typeof data === "string") {
+         const parsed = JSON.parse(data) as { message: string };
+-        setState((prev) => ({ ...prev, status: "error", error: parsed.message }));
++        setState((prev) => ({
++          ...prev,
++          status: "error",
++          error: parsed.message,
++        }));
+         source.close();
+       }
+     });
+@@ -125,7 +146,11 @@
+       setState((prev) =>
+         TERMINAL_STATUSES.has(prev.status)
+           ? prev
+-          : { ...prev, error: prev.error ?? "Connection to the run stream was lost." },
++          : {
++              ...prev,
++              error:
++                prev.error ?? "执行流连接中断，正在重连；不会重新提交任务。",
++            },
+       );
+     };
+ 

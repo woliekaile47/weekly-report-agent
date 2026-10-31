@@ -1,0 +1,25 @@
+sales:
+  record_id: [记录ID, record_id]
+  date: [销售日期, 日期, date]
+  store_id: [门店编码, 门店编号, store_id]
+  store: [门店名称, 门店, store]
+  product_id: [商品编码, 商品编号, product_id]
+  product: [商品名称, product]
+  channel: [渠道, channel]
+  quantity: [销售数量, 数量, quantity]
+  amount: [实收金额, 实收金额（元）, 销售额, amount]
+  cost: [成本金额, cost]
+stores:
+  store_id: [门店编码, store_id]
+  store: [门店名称, 门店, store]
+  region: [区域, 大区, region]
+products:
+  product_id: [商品编码, product_id]
+  product: [商品名称, product]
+  category: [品类, category]
+targets:
+  region: [区域, region]
+  year: [年份, year]
+  week: [周次, week]
+  target: [实收目标(元), 实收目标（元）, target]
+delivery_channel: 外卖

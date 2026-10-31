@@ -1,5 +1,5 @@
 --- upstream/backend/app/api/routers/runs.py
-+++ report_agent/api.py
++++ adapted/report_agent/api.py
 @@ -1,262 +1,224 @@
 -"""REST + SSE API for starting, streaming, resuming, and listing document
 -audit runs.
@@ -474,7 +474,7 @@
  
      return StreamingResponse(
          event_source(),
-@@ -265,46 +227,140 @@
+@@ -265,46 +227,142 @@
      )
  
  
@@ -657,4 +657,6 @@
 +
 +    @app.get("/{path:path}")
 +    def index(path: str):
-+        return FileResponse(dist / "index.html")
++        if path == "api" or path.startswith("api/"):
++            raise HTTPException(404, "接口不存在")
++        return FileResponse(dist / "index.html", headers={"Cache-Control": "no-store"})

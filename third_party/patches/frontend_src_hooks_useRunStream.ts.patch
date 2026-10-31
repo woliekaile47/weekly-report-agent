@@ -1,11 +1,12 @@
 --- upstream/frontend/src/hooks/useRunStream.ts
-+++ frontend/src/hooks/useRunStream.ts
-@@ -1,7 +1,14 @@
++++ adapted/frontend/src/hooks/useRunStream.ts
+@@ -1,7 +1,15 @@
 +// Adapted from invoice assistant a0a0fc5, MIT. Persistent replay and Chinese errors added.
  import { useEffect, useState } from "react";
  
  import { streamUrl } from "../api/client";
 -import type { GraphNodeName, InterruptPayload, RunStatus, StateSnapshot, TraceEventOut } from "../api/types";
++import { normalizeSnapshot } from "../api/snapshot";
 +import type {
 +  GraphNodeName,
 +  InterruptPayload,
@@ -16,7 +17,7 @@
  
  export interface RunStreamState {
    status: RunStatus | "connecting";
-@@ -33,7 +40,10 @@
+@@ -33,7 +41,10 @@
   * directly -- driving both the live GraphView highlighting and the
   * extraction/validation/reconciliation output panels.
   */
@@ -28,7 +29,19 @@
    const [state, setState] = useState<RunStreamState>(INITIAL_STATE);
  
    useEffect(() => {
-@@ -85,9 +95,12 @@
+@@ -58,7 +69,10 @@
+         completedNodes: prev.completedNodes.includes(data.node)
+           ? prev.completedNodes
+           : [...prev.completedNodes, data.node],
+-        snapshot: { ...prev.snapshot, ...(data.output as StateSnapshot) },
++        snapshot: normalizeSnapshot({
++          ...prev.snapshot,
++          ...(data.output as StateSnapshot),
++        }),
+         trace: [...prev.trace, ...data.trace],
+       }));
+     });
+@@ -85,9 +99,12 @@
          ...prev,
          status: data.status,
          finalStatus: data.final_status,
@@ -43,10 +56,12 @@
              ? [...prev.completedNodes, "finalize"]
              : prev.completedNodes,
        }));
-@@ -106,6 +119,10 @@
+@@ -105,7 +122,11 @@
+         ...prev,
          status: data.status,
          trace: data.trace,
-         snapshot: data.state_snapshot,
+-        snapshot: data.state_snapshot,
++        snapshot: normalizeSnapshot(data.state_snapshot),
 +        currentNode:
 +          data.state_snapshot.status === "paused"
 +            ? (data.state_snapshot.resume_node ?? null)
@@ -54,7 +69,7 @@
          finalStatus: data.final_status,
        }));
      });
-@@ -116,7 +133,11 @@
+@@ -116,7 +137,11 @@
        const data = (evt as MessageEvent).data;
        if (typeof data === "string") {
          const parsed = JSON.parse(data) as { message: string };
@@ -67,7 +82,7 @@
          source.close();
        }
      });
-@@ -125,7 +146,11 @@
+@@ -125,7 +150,11 @@
        setState((prev) =>
          TERMINAL_STATUSES.has(prev.status)
            ? prev

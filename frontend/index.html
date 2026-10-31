@@ -6,7 +6,36 @@
     <title>经营周报工作空间</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div
+        style="
+          max-width: 640px;
+          margin: 64px auto;
+          padding: 24px;
+          font:
+            14px/1.8 system-ui,
+            sans-serif;
+          color: #475569;
+        "
+      >
+        <p id="startup-message">正在加载经营周报工作空间…</p>
+        <div id="startup-recovery" hidden>
+          <p>页面资源未能加载。任务进度保存在服务端。</p>
+          <a href="/" style="color: #1a48d1">重新加载工作空间</a>
+        </div>
+      </div>
+    </div>
+    <noscript>请启用 JavaScript 后使用工作空间。</noscript>
+    <script>
+      window.setTimeout(function () {
+        var message = document.getElementById("startup-message");
+        var recovery = document.getElementById("startup-recovery");
+        if (message && recovery) {
+          message.textContent = "工作空间加载未完成";
+          recovery.hidden = false;
+        }
+      }, 10000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

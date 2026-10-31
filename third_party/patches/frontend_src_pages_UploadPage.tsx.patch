@@ -1,0 +1,207 @@
+--- upstream/frontend/src/pages/UploadPage.tsx
++++ adapted/frontend/src/pages/UploadPage.tsx
+@@ -1,98 +1,122 @@
+-import { useMutation, useQuery } from "@tanstack/react-query";
+-import { useRef, useState } from "react";
++// Adapted from Invoice Audit Assistant UploadPage.tsx (a0a0fc5, MIT).
++import { useState } from "react";
+ import { useNavigate } from "react-router-dom";
+-
+-import { listSamples, runSampleDocument, uploadDocument } from "../api/client";
++import { request } from "../api/client";
++import { FileInput } from "../components/ui";
+ 
+ export function UploadPage() {
+   const navigate = useNavigate();
+-  const fileInputRef = useRef<HTMLInputElement>(null);
+-  const [selectedSample, setSelectedSample] = useState("");
+-
+-  const { data: samplesData } = useQuery({ queryKey: ["samples"], queryFn: listSamples });
+-
+-  const uploadMutation = useMutation({
+-    mutationFn: uploadDocument,
+-    onSuccess: (data) => navigate(`/runs/${data.id}`),
+-  });
+-
+-  const sampleMutation = useMutation({
+-    mutationFn: runSampleDocument,
+-    onSuccess: (data) => navigate(`/runs/${data.id}`),
+-  });
+-
+-  const busy = uploadMutation.isPending || sampleMutation.isPending;
+-
++  const [error, setError] = useState("");
++  const [busy, setBusy] = useState(false);
++  async function submit(e: React.FormEvent<HTMLFormElement>) {
++    e.preventDefault();
++    setBusy(true);
++    setError("");
++    const data = new FormData(e.currentTarget);
++    data.set(
++      "spec",
++      JSON.stringify({
++        title: data.get("title"),
++        year: Number(data.get("year")),
++        week: Number(data.get("week")),
++        focus: data.get("focus"),
++      }),
++    );
++    for (const k of ["sales", "minutes", "master"]) {
++      const f = data.get(k);
++      if (f instanceof File && !f.size) data.delete(k);
++    }
++    try {
++      const r = await request<{ id: string }>("/runs", {
++        method: "POST",
++        body: data,
++      });
++      navigate(`/runs/${r.id}`);
++    } catch (err) {
++      setError(String(err));
++    } finally {
++      setBusy(false);
++    }
++  }
+   return (
+     <div className="mx-auto max-w-2xl space-y-8">
+       <div>
+-        <h2 className="mb-2 text-xl font-semibold text-slate-900">Upload a document</h2>
+-        <p className="mb-4 text-sm text-slate-500">
+-          Upload a PDF invoice, an image receipt (PNG/JPG), or an Excel general ledger (.xlsx). The
+-          graph will extract fields, validate them, cross-check them against the ledger in
+-          Postgres, then pause for your review before posting.
++        <h2 className="mb-2 text-xl font-semibold text-slate-900">
++          上传业务材料
++        </h2>
++        <p className="mb-4 text-sm leading-6 text-slate-500">
++          上传销售明细与本周周会纪要。系统将计算经营指标、核对原文依据并生成
++          Word 周报，完成质检后暂停，等待你审核。
+         </p>
+         <form
+-          onSubmit={(e) => {
+-            e.preventDefault();
+-            const file = fileInputRef.current?.files?.[0];
+-            if (file) uploadMutation.mutate(file);
+-          }}
+-          className="flex flex-col gap-3 rounded-lg border border-dashed border-slate-300 p-6"
++          onSubmit={submit}
++          className="flex flex-col gap-4 rounded-lg border border-dashed border-slate-300 bg-white p-6"
+         >
+-          <input
+-            ref={fileInputRef}
+-            type="file"
+-            accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls"
+-            aria-label="Choose a document to upload"
+-            className="text-sm"
++          <label>
++            任务名称
++            <input name="title" defaultValue="门店经营周报" required />
++          </label>
++          <div className="grid grid-cols-2 gap-4">
++            <label>
++              年份
++              <input
++                name="year"
++                type="number"
++                min={2000}
++                max={2100}
++                defaultValue={2026}
++                required
++              />
++            </label>
++            <label>
++              ISO 周
++              <input
++                name="week"
++                type="number"
++                min={1}
++                max={53}
++                defaultValue={44}
++                required
++              />
++            </label>
++          </div>
++          <FileInput
++            label="销售明细（Excel / CSV）"
++            name="sales"
++            accept=".xlsx,.csv"
++            required
+           />
+-          <button
+-            type="submit"
+-            disabled={busy}
+-            className="self-start rounded-md bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+-          >
+-            {uploadMutation.isPending ? "Uploading..." : "Upload & process"}
++          <FileInput
++            label="本周周会纪要（Word / 文本）"
++            name="minutes"
++            accept=".docx,.txt,.md"
++            required
++          />
++          <label>
++            重点关注（可选）
++            <textarea
++              name="focus"
++              rows={2}
++              placeholder="需要重点分析的区域、门店或经营问题"
++            />
++          </label>
++          <details className="text-sm text-slate-600">
++            <summary>基础资料与导入说明</summary>
++            <p className="my-3 leading-6">
++              Excel 可包含销售、门店、商品和目标工作表。CSV
++              使用已配置的基础资料，编码须能匹配；也可补充基础资料工作簿。需要环比时，销售文件须包含上一周期数据。
++            </p>
++            <FileInput label="基础资料（可选）" name="master" accept=".xlsx" />
++          </details>
++          {error && (
++            <p role="alert" className="error">
++              {error}
++            </p>
++          )}
++          <button type="submit" disabled={busy} className="primary self-start">
++            {busy ? "正在上传…" : "上传并执行"}
+           </button>
+-          {uploadMutation.isError && (
+-            <p className="text-sm text-rose-600">{(uploadMutation.error as Error).message}</p>
+-          )}
+         </form>
+-      </div>
+-
+-      <div>
+-        <h2 className="mb-2 text-xl font-semibold text-slate-900">Or run a bundled sample</h2>
+-        <p className="mb-4 text-sm text-slate-500">
+-          Zero-setup demo: these are synthetic documents bundled with this repo (see{" "}
+-          <code>sample-data/README.md</code>), including a caught duplicate payment and a
+-          policy-threshold flag.
+-        </p>
+-        <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-6">
+-          <select
+-            value={selectedSample}
+-            onChange={(e) => setSelectedSample(e.target.value)}
+-            aria-label="Choose a sample document"
+-            className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+-          >
+-            <option value="">Choose a sample document...</option>
+-            {samplesData?.samples.map((sample) => (
+-              <option key={sample.id} value={sample.id}>
+-                {sample.label}
+-              </option>
+-            ))}
+-          </select>
+-          <button
+-            type="button"
+-            disabled={busy || !selectedSample}
+-            onClick={() => sampleMutation.mutate(selectedSample)}
+-            className="self-start rounded-md bg-slate-800 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-900 disabled:opacity-50"
+-          >
+-            {sampleMutation.isPending ? "Starting..." : "Run sample document"}
+-          </button>
+-          {sampleMutation.isError && (
+-            <p className="text-sm text-rose-600">{(sampleMutation.error as Error).message}</p>
+-          )}
+-        </div>
+       </div>
+     </div>
+   );

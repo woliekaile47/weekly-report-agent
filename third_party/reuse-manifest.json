@@ -4,14 +4,14 @@
     "upstream_file": "frontend/src/components/GraphView.tsx",
     "local_file": "frontend/src/components/GraphView.tsx",
     "upstream_sha256": "45fd51b8b31a9491515135a23458d7f8f0fc71a12706d11189fd2df5231b9b7b",
-    "adapted_sha256": "0ab2ecae29eda46dff6de41dadbc06238287a500c1181443d6e9407d967ee611"
+    "adapted_sha256": "371394acee3198774e72dce402c7a53f4923e3d5e111ad020ed1b8175abb86aa"
   },
   {
     "upstream_project": "invoice",
     "upstream_file": "frontend/src/hooks/useRunStream.ts",
     "local_file": "frontend/src/hooks/useRunStream.ts",
     "upstream_sha256": "9a7f6f042360bc8fa06b3bc85fa5771b73727ef79cd603c1e0347d99c3bf5b5a",
-    "adapted_sha256": "6deeda3e559ccb2ce227d622e6ab5d1c3a37bf05bf550569ab283038f613c5ec"
+    "adapted_sha256": "8194f5bf88b19ebe3e7ab6352daf122b44f2b40de3ed47e9e01694cef32e5529"
   },
   {
     "upstream_project": "invoice",
@@ -25,6 +25,62 @@
     "upstream_file": "backend/app/api/routers/runs.py",
     "local_file": "report_agent/api.py",
     "upstream_sha256": "b9b3aed426c5bfbd307dcc0581f4d98b4daf30f3ce2d2114063c00f189238c75",
-    "adapted_sha256": "ce0ec728c8569ad3df0b9656ce639f3abfd90f94da29baa8986ddf6495322f1f"
+    "adapted_sha256": "9e16142fec1089eff759cb5edaf235e0e5b1f7ebda0d33fa10d4b3ba088949ca"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/App.tsx",
+    "local_file": "frontend/src/App.tsx",
+    "upstream_sha256": "1d636a3d3dbf723f3897b44d8da7fa1d21d924777a7dd344c86e562fbdedd8e0",
+    "adapted_sha256": "145678bd0534ab398be2da106121c2d0fffb8fd29ab2ff45f351e5e047bdcf35"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/index.css",
+    "local_file": "frontend/src/index.css",
+    "upstream_sha256": "0bbb8fad94005a51e5073097119eb644a209e393cdcb8054ef9feee781cd9e66",
+    "adapted_sha256": "8b3088709fc00d8400e7717c186e2f0928b04f6cc42b09d9bbc51f9b5923c740"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/main.tsx",
+    "local_file": "frontend/src/main.tsx",
+    "upstream_sha256": "ef36203b9ebe606e648ff671ad6d1342f9f322de5b80e145eed5c013c8419886",
+    "adapted_sha256": "c32892a20244d4dc5c4b038f7c54468212b65efcdafc63672e0fce8e8991b029"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/pages/UploadPage.tsx",
+    "local_file": "frontend/src/pages/UploadPage.tsx",
+    "upstream_sha256": "663f9130f0ebb8a6a5a7654fac620b721383d9496fb51b30673c8f35ead2b99f",
+    "adapted_sha256": "0e707b147dc6cae960e58ffe657c2b2f271bb94c9f4192124b99cd6a8d3c7031"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/pages/HistoryPage.tsx",
+    "local_file": "frontend/src/pages/HistoryPage.tsx",
+    "upstream_sha256": "f381e88d3ec2ad507297b81f3a41c84a21d417dfd6eb50e7ffa73353e751c784",
+    "adapted_sha256": "814beb845a3392094b98106d69b573e3bcd265479ea4698438b9218c468751aa"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/pages/RunDetailPage.tsx",
+    "local_file": "frontend/src/pages/RunDetailPage.tsx",
+    "upstream_sha256": "cac2f74156f2b53281878a8ac3f8b6ad008b672257f09344d2b01a6799d71a0f",
+    "adapted_sha256": "7aef2a6a6da4b284284c9d23f03346b4dfcb0062dc41d67d712ba0db9a9a16c8"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/components/NodePanel.tsx",
+    "local_file": "frontend/src/components/NodePanel.tsx",
+    "upstream_sha256": "c87554a0c5d705c52ce56c29bf222a4a89dc8ede5e6958a813989b041af81135",
+    "adapted_sha256": "6a27904c91de505b08219e1bb21d9585c174b58f54ca3ce09c3c8a554f9ab29e"
+  },
+  {
+    "upstream_project": "invoice",
+    "upstream_file": "frontend/src/components/RunHistoryList.tsx",
+    "local_file": "frontend/src/components/RunHistoryList.tsx",
+    "upstream_sha256": "ab752b67be0b126538d0584703773c14c92c619f69b5c9b17d9ab109ff9ca83e",
+    "adapted_sha256": "7c502a0b34787566cd13c3392ae3990e87aee750899962d60ba7ddbb739bfa34"
   }
 ]

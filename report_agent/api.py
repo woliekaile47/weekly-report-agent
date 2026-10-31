@@ -363,4 +363,6 @@ if dist.exists():
 
     @app.get("/{path:path}")
     def index(path: str):
-        return FileResponse(dist / "index.html")
+        if path == "api" or path.startswith("api/"):
+            raise HTTPException(404, "接口不存在")
+        return FileResponse(dist / "index.html", headers={"Cache-Control": "no-store"})

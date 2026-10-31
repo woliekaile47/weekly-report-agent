@@ -35,14 +35,13 @@ def main():
             )
             page.wait_for_timeout(seconds * 1000)
 
-        page.get_by_role("button", name="新建任务").click()
+        page.get_by_role("link", name="上传与执行", exact=True).click()
         chapter(
             "经营周报员工｜真实应用巡览",
             "LangGraph 编排 · MCP 官方 SDK · 可配置岗位技能 · Word 交付。画面展示实际应用与真实模型生成成果，不使用模拟对话。",
             10,
         )
-        page.evaluate("id => localStorage.setItem('weekly-task',id)", task_id)
-        page.reload(wait_until="networkidle")
+        page.goto(f"http://127.0.0.1:8501/runs/{task_id}", wait_until="networkidle")
         chapter(
             "第 44 周｜系统数据与模型解释",
             "实收 573,635 元，环比 -9.3%。程序计算指标；模型结合第 44 周纪要逐项解释异常。此任务经过真实模型生成及质检修正。",
@@ -74,19 +73,19 @@ def main():
             "模型请求、工具调用、质检及恢复均有记录。后台中断后从检查点继续，事件回放不会重新提交任务。",
             9,
         )
-        page.get_by_role("button", name="员工配置", exact=True).click()
+        page.goto("http://127.0.0.1:8501/settings/employee", wait_until="networkidle")
         chapter(
             "业务人员可以修改员工做法",
             "职责、步骤、注意事项、阈值与质检以技能或 YAML 文件维护。新任务保存配置快照；已受理任务保持原配置。",
             10,
         )
-        page.get_by_role("button", name="执行限制", exact=True).click()
+        page.get_by_role("link", name="执行限制与人工处理", exact=True).click()
         chapter(
             "有界执行与人工处理",
             "每轮 8 次模型请求，单次 90 秒，活动执行 600 秒。超限暂停，填写处理人和处理意见后明确恢复。限制理由随交付包保存。",
             9,
         )
-        page.get_by_role("button", name="任务工作台", exact=True).click()
+        page.goto(f"http://127.0.0.1:8501/runs/{task_id}", wait_until="networkidle")
         page.get_by_role("tab", name="周报与审核").click()
         page.get_by_role("heading", name=re.compile("^人工审核")).scroll_into_view_if_needed()
         chapter(
@@ -94,10 +93,10 @@ def main():
             "审核人可通过或填写意见退回，退回后生成新版本、重新质检和送审。本视频只浏览待审核成果，不替业务人员批准；正式交付包需通过当前版本后生成。",
             12,
         )
-        page.get_by_role("button", name="关于工作空间", exact=True).click()
+        page.get_by_text("关于工作空间", exact=True).click()
         chapter(
             "开源复用与验证边界",
-            "复用 Invoice Audit Assistant、GenSlide 和 docxtpl，保留来源、版本与许可。18 项工程测试和 6 项 promptfoo 回归通过；企业盲测与业务审核仍需现场完成。",
+            "界面和流程复用 Invoice Audit Assistant，文本处理复用 GenSlide，Word 使用 docxtpl。来源、版本与许可均已保留；企业盲测与业务审核仍需现场完成。",
             10,
         )
         video = page.video

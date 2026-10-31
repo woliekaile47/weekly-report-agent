@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 
 import { streamUrl } from "../api/client";
+import { normalizeSnapshot } from "../api/snapshot";
 import type {
   GraphNodeName,
   InterruptPayload,
@@ -68,7 +69,10 @@ export function useRunStream(
         completedNodes: prev.completedNodes.includes(data.node)
           ? prev.completedNodes
           : [...prev.completedNodes, data.node],
-        snapshot: { ...prev.snapshot, ...(data.output as StateSnapshot) },
+        snapshot: normalizeSnapshot({
+          ...prev.snapshot,
+          ...(data.output as StateSnapshot),
+        }),
         trace: [...prev.trace, ...data.trace],
       }));
     });
@@ -118,7 +122,7 @@ export function useRunStream(
         ...prev,
         status: data.status,
         trace: data.trace,
-        snapshot: data.state_snapshot,
+        snapshot: normalizeSnapshot(data.state_snapshot),
         currentNode:
           data.state_snapshot.status === "paused"
             ? (data.state_snapshot.resume_node ?? null)

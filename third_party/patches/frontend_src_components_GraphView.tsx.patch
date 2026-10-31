@@ -1,5 +1,5 @@
 --- upstream/frontend/src/components/GraphView.tsx
-+++ frontend/src/components/GraphView.tsx
++++ adapted/frontend/src/components/GraphView.tsx
 @@ -1,4 +1,12 @@
 -import { Background, type Edge, Handle, type Node, Position, ReactFlow } from "@xyflow/react";
 +// Adapted from manuelbomi Invoice Audit Assistant a0a0fc5 (MIT); see third_party/licenses.
@@ -14,7 +14,21 @@
  import "@xyflow/react/dist/style.css";
  import { useMemo } from "react";
  
-@@ -21,7 +29,7 @@
+@@ -7,31 +15,31 @@
+ interface GraphViewProps {
+   currentNode: GraphNodeName | null;
+   completedNodes: GraphNodeName[];
+-  isLedgerRun?: boolean;
+ }
+ 
+ interface NodeData extends Record<string, unknown> {
+   label: string;
+   active: boolean;
+   done: boolean;
+-  skipped: boolean;
+ }
+ 
+ function StepNode({ data }: { data: NodeData }) {
    const base =
      "rounded-lg border-2 px-3 py-2 text-sm font-medium shadow-sm min-w-[150px] text-center transition-colors";
    const cls = data.active
@@ -22,8 +36,11 @@
 +    ? `${base} border-brand-500 bg-brand-500 text-white `
      : data.done
        ? `${base} border-brand-300 bg-brand-50 text-brand-800`
-       : data.skipped
-@@ -31,7 +39,11 @@
+-      : data.skipped
+-        ? `${base} border-dashed border-slate-200 bg-slate-50 text-slate-300`
+-        : `${base} border-slate-300 bg-white text-slate-500`;
++      : `${base} border-slate-300 bg-white text-slate-500`;
+   return (
      <div className={cls}>
        <Handle type="target" position={Position.Top} className="!bg-slate-400" />
        {data.label}
@@ -36,7 +53,7 @@
      </div>
    );
  }
-@@ -39,17 +51,28 @@
+@@ -39,17 +47,17 @@
  const nodeTypes = { step: StepNode };
  
  const LAYOUT: Record<GraphNodeName, { x: number; y: number; label: string }> = {
@@ -47,34 +64,32 @@
 -  human_review: { x: 260, y: 420, label: "5. Human Review" },
 -  finalize: { x: 260, y: 520, label: "6. Finalize" },
 +  ingest: { x: 260, y: 0, label: "1. 识别材料" },
-+  calculate: { x: 260, y: 100, label: "2. 计算指标" },
-+  evidence: { x: 260, y: 200, label: "3. 核对纪要" },
-+  analyze: { x: 260, y: 300, label: "4. 分析经营" },
-+  render: { x: 260, y: 400, label: "5. 生成周报" },
-+  quality: { x: 260, y: 500, label: "6. 自动质检" },
-+  human_review: { x: 260, y: 600, label: "7. 人工审核" },
-+  finalize: { x: 260, y: 700, label: "8. 交付成果" },
++  calculate: { x: 260, y: 64, label: "2. 计算指标" },
++  evidence: { x: 260, y: 128, label: "3. 核对纪要" },
++  analyze: { x: 260, y: 192, label: "4. 分析经营" },
++  render: { x: 260, y: 256, label: "5. 生成周报" },
++  quality: { x: 260, y: 320, label: "6. 自动质检" },
++  human_review: { x: 260, y: 384, label: "7. 人工审核" },
++  finalize: { x: 260, y: 448, label: "8. 交付成果" },
  };
  
 -const MIDDLE_NODES: GraphNodeName[] = ["extract_fields", "validate", "reconcile", "human_review"];
-+const MIDDLE_NODES: GraphNodeName[] = [
-+  "calculate",
-+  "evidence",
-+  "analyze",
-+  "human_review",
-+];
- 
+-
 -export function GraphView({ currentNode, completedNodes, isLedgerRun }: GraphViewProps) {
-+export function GraphView({
-+  currentNode,
-+  completedNodes,
-+  isLedgerRun,
-+}: GraphViewProps) {
++export function GraphView({ currentNode, completedNodes }: GraphViewProps) {
    const nodes: Node[] = useMemo(
      () =>
        (Object.keys(LAYOUT) as GraphNodeName[]).map((id) => ({
-@@ -67,35 +90,50 @@
-     [currentNode, completedNodes, isLedgerRun],
+@@ -60,73 +68,76 @@
+           label: LAYOUT[id].label,
+           active: currentNode === id,
+           done: completedNodes.includes(id) && currentNode !== id,
+-          skipped: Boolean(isLedgerRun) && MIDDLE_NODES.includes(id),
+         } satisfies NodeData,
+         draggable: false,
+       })),
+-    [currentNode, completedNodes, isLedgerRun],
++    [currentNode, completedNodes],
    );
  
 -  const edgeStyle = (active: boolean) => ({ stroke: active ? "#265ef2" : "#cbd5e1", strokeWidth: active ? 2.5 : 1.5 });
@@ -102,48 +117,77 @@
          source: "ingest",
 -        target: "extract_fields",
 -        style: edgeStyle(completedNodes.includes("extract_fields")),
+-        hidden: Boolean(isLedgerRun),
 +        target: "calculate",
 +        style: edgeStyle(completedNodes.includes("calculate")),
-         hidden: Boolean(isLedgerRun),
        },
        {
 -        id: "e-extract-validate",
 -        source: "extract_fields",
 -        target: "validate",
 -        style: edgeStyle(completedNodes.includes("validate")),
+-        hidden: Boolean(isLedgerRun),
 +        id: "e-extract-evidence",
 +        source: "calculate",
 +        target: "evidence",
 +        style: edgeStyle(completedNodes.includes("evidence")),
-         hidden: Boolean(isLedgerRun),
        },
        {
 -        id: "e-validate-reconcile",
 -        source: "validate",
 -        target: "reconcile",
 -        style: edgeStyle(completedNodes.includes("reconcile")),
+-        hidden: Boolean(isLedgerRun),
 +        id: "e-evidence-analyze",
 +        source: "evidence",
 +        target: "analyze",
 +        style: edgeStyle(completedNodes.includes("analyze")),
-         hidden: Boolean(isLedgerRun),
        },
        {
 -        id: "e-reconcile-human",
 -        source: "reconcile",
 -        target: "human_review",
-+        id: "e-analyze-human",
+-        style: edgeStyle(completedNodes.includes("human_review")),
+-        hidden: Boolean(isLedgerRun),
++        id: "e-analyze-render",
 +        source: "analyze",
 +        target: "render",
-         style: edgeStyle(completedNodes.includes("human_review")),
-         hidden: Boolean(isLedgerRun),
++        style: edgeStyle(completedNodes.includes("render")),
        },
-@@ -120,7 +158,7 @@
+       {
+         id: "e-human-finalize",
+         source: "human_review",
+         target: "finalize",
+         style: edgeStyle(completedNodes.includes("finalize")),
+-        hidden: Boolean(isLedgerRun),
+-      },
+-      {
+-        id: "e-ingest-finalize-ledger",
+-        source: "ingest",
+-        target: "finalize",
+-        label: "ledger upload (skip review)",
+-        type: "smoothstep",
+-        style: { stroke: "#0f766e", strokeWidth: 2 },
+-        hidden: !isLedgerRun,
+       },
+     ],
+-    [completedNodes, isLedgerRun],
++    [completedNodes],
    );
  
    return (
 -    <div className="h-[560px] w-full rounded-xl border border-slate-200 bg-white">
-+    <div className="h-[590px] w-full rounded-xl border border-slate-200 bg-white">
++    <div
++      aria-label="任务执行流程图"
++      className="h-[560px] w-full rounded-xl border border-slate-200 bg-white"
++    >
        <ReactFlow
          nodes={nodes}
          edges={edges}
+         nodeTypes={nodeTypes}
+         fitView
+-        fitViewOptions={{ padding: 0.3 }}
++        fitViewOptions={{ padding: 0.1 }}
+         proOptions={{ hideAttribution: true }}
+         nodesDraggable={false}
+         nodesConnectable={false}

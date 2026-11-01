@@ -9,9 +9,9 @@ limits:
   tool_retries: 2
   quality_repairs: 2
 limit_reasons:
-  model_calls: 初稿、两轮质检修正及故障重试共用八次请求额度，限制免费模型消耗；每个实际请求含失败均计数。
-  model_timeout_seconds: 允许免费模型在九十秒内完成结构化分析，达到上限暂停转人工，避免无限等待。
-  active_seconds: 十分钟覆盖约十万行以内的数据处理与有限模型修正，超过上限保存进度并要求人工处理。
+  model_calls: 为初稿、有限质检修正及故障重试共用请求额度；每个实际请求含失败均计数，超限暂停转人工。
+  model_timeout_seconds: 为模型结构化分析预留完成时间；超时暂停转人工，避免无限等待。
+  active_seconds: 覆盖数据处理与有限模型修正；超过上限保存进度并要求人工处理，等待人工不计时。
 quality:
   min_characters: 160
   max_characters: 1800

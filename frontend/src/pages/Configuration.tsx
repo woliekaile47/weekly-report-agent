@@ -6,7 +6,6 @@ interface Config {
   version: string;
   employee: {
     limits: Record<string, number>;
-    limit_reasons: Record<string, string>;
   };
   connection: Record<string, string>;
   key_configured: boolean;
@@ -42,6 +41,35 @@ export function Configuration({
       });
       setConfig({ ...config!, version: r.version });
       setMessage("已保存，新任务使用新配置；已有任务保留快照。");
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  async function saveLimits(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    setMessage("");
+    const values = new FormData(e.currentTarget);
+    try {
+      const result = await request<{ version: string; limits: Record<string, number> }>(
+        "/limits",
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            version: config!.version,
+            model_calls: Number(values.get("model_calls")),
+            model_timeout_seconds: Number(values.get("model_timeout_seconds")),
+            active_seconds: Number(values.get("active_seconds")),
+          }),
+        },
+      );
+      setConfig({
+        ...config!,
+        version: result.version,
+        employee: { ...config!.employee, limits: result.limits },
+      });
+      setMessage("已保存。新任务使用新上限；已有任务保留创建时的配置。");
     } catch (e) {
       setError(String(e));
     }
@@ -91,40 +119,32 @@ export function Configuration({
         </form>
       )}
       {page === "limits" && (
-        <section className="card">
+        <form className="card" onSubmit={saveLimits}>
           <p>
             实际模型请求（包含失败）计入调用次数。活动执行时间不包含等待人工处理的时间。达到上限后停止执行、保存进度，填写处理人和意见后才能恢复。
           </p>
-          <table>
-            <thead>
-              <tr>
-                <th>限制</th>
-                <th>取值</th>
-                <th>理由</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(config.employee.limit_reasons).map(([k, v]) => (
-                <tr key={k}>
-                  <td>
-                    {(
-                      {
-                        model_calls: "每轮模型调用",
-                        model_timeout_seconds: "单次模型时长",
-                        active_seconds: "活动执行时长",
-                      } as Record<string, string>
-                    )[k] ?? k}
-                  </td>
-                  <td>{config.employee.limits[k]}</td>
-                  <td>{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {([
+            ["model_calls", "模型调用上限", "次"],
+            ["model_timeout_seconds", "单次模型时长", "秒"],
+            ["active_seconds", "活动执行时长", "秒"],
+          ] as const).map(([key, label, unit]) => (
+            <label key={key}>
+              {label}（{unit}）
+              <input
+                name={key}
+                type="number"
+                min={1}
+                step={1}
+                required
+                defaultValue={config.employee.limits[key]}
+              />
+            </label>
+          ))}
+          <button className="primary" type="submit">保存执行上限</button>
           <p className="muted">
-            在员工配置中修改数值及取值理由；交付包保存本任务的实际配置说明。
+            上限写入员工配置文件。新任务使用新值；已有任务沿用创建时的配置快照。
           </p>
-        </section>
+        </form>
       )}
       {page === "settings" && (
         <form

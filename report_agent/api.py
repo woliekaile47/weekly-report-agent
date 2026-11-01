@@ -6,6 +6,7 @@ of a single-consumer queue; strict report-version guards; no demo/auto-approval 
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -14,7 +15,7 @@ from dotenv import set_key
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
 
 from report_agent.config import ROOT, connection, snapshot
 from report_agent.models import Review, TaskSpec, WorkflowError
@@ -327,6 +328,49 @@ def get_config():
 class ConfigUpdate(BaseModel):
     version: str
     files: dict[str, str]
+
+
+class LimitsUpdate(BaseModel):
+    version: str
+    model_calls: StrictInt
+    model_timeout_seconds: StrictInt
+    active_seconds: StrictInt
+
+
+@app.put("/api/limits")
+def save_limits(body: LimitsUpdate):
+    from filelock import FileLock
+
+    values = {
+        "model_calls": body.model_calls,
+        "model_timeout_seconds": body.model_timeout_seconds,
+        "active_seconds": body.active_seconds,
+    }
+    if any(type(value) is not int or value < 1 for value in values.values()):
+        raise HTTPException(422, "执行上限须为大于零的整数")
+    with FileLock(ROOT / "config/edit.lock", timeout=3):
+        old = snapshot()
+        if old["version"] != body.version:
+            raise HTTPException(409, "配置已更新，请刷新再编辑")
+        path = ROOT / "config/employee.yaml"
+        original = old["files"]["config/employee.yaml"]
+        head, marker, tail = original.partition("limits:\n")
+        limits, next_marker, rest = tail.partition("limit_reasons:\n")
+        if not marker or not next_marker:
+            raise HTTPException(422, "限制配置格式无法识别，请在员工配置中编辑")
+        for key, value in values.items():
+            pattern = rf"(?m)^([ \t]+{re.escape(key)}:[ \t]*)\d+([ \t]*(?:#.*)?)$"
+            limits, count = re.subn(pattern, lambda match: f"{match[1]}{value}{match[2]}", limits)
+            if count != 1:
+                raise HTTPException(422, f"限制配置 {key} 无法定位，请在员工配置中编辑")
+        updated = head + marker + limits + next_marker + rest
+        try:
+            path.write_text(updated, encoding="utf-8")
+            new = snapshot()
+        except Exception as exc:
+            path.write_text(original, encoding="utf-8")
+            raise HTTPException(422, "执行上限无效，已还原") from exc
+    return {"version": new["version"], "limits": new["employee"]["limits"]}
 
 
 @app.put("/api/config")

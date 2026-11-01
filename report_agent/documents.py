@@ -143,13 +143,11 @@ def percent(value, sign=False):
     return (f"{value:+.1f}%" if sign else f"{value:.1f}%") if value is not None else "不适用"
 
 
-def generate_report(task_id, version, metrics, minutes, draft, bundle, feedback):
+def generate_report(task_id, version, metrics, minutes, draft, bundle, feedback, render_options=None):
     template = ROOT / "templates/weekly-report.docx"
     if not template.exists():
         build_template(template)
-    artifact_id = (
-        f"v{version}-{digest({'draft': draft, 'metrics': metrics, 'template': sha256(template)})[:12]}"
-    )
+    artifact_id = f"v{version}-{digest({'draft': draft, 'metrics': metrics, 'template': sha256(template), 'layout': render_options})[:12]}"
     base = task_path(task_id, f"artifacts/{artifact_id}")
     base.mkdir(parents=True, exist_ok=True)
     pictures = chart(metrics, base)
@@ -247,6 +245,11 @@ def generate_report(task_id, version, metrics, minutes, draft, bundle, feedback)
         "provenance": f"口径：{metrics['import_summary']['sheet']} 的实收金额；按ISO周统计。完整指标、原文、质检与配置快照见交付包。",
     }
     tpl.render(context, autoescape=True)
+    if render_options:
+        style = tpl.docx.styles["Normal"]
+        style.font.size = Pt(max(8, min(12, render_options.get("font_points", 8.5))))
+        style.paragraph_format.space_after = Pt(max(0, min(12, render_options.get("space_after_points", 3))))
+        style.paragraph_format.line_spacing = max(1, min(1.5, render_options.get("line_spacing", 1.05)))
     path = base / "经营周报.docx"
     tmp = base / "report.tmp.docx"
     tpl.save(tmp)
@@ -275,6 +278,9 @@ def inspect_report(task_id, artifact, metrics, minutes, draft, bundle, feedback)
     tokens = metrics["tokens"]
     headings = {p.text for p in doc.paragraphs if p.style.name.startswith("Heading")}
     check("结构完整", set(quality["required_sections"]).issubset(headings), "六类业务章节必须齐全")
+    sentences = [part for part in re.split(r"[。！？!?]+|(?<!\d)\.(?!\d)", draft["summary"]) if part.strip()]
+    maximum = quality.get("max_summary_sentences", 5)
+    check("摘要句数", len(sentences) <= maximum, f"摘要 {len(sentences)} 句；上限 {maximum} 句")
     prose = "\n".join(
         [
             draft["summary"],

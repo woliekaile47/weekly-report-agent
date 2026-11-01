@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 
 import { streamUrl } from "../api/client";
-import { normalizeSnapshot } from "../api/snapshot";
+import { completedFromSnapshot, normalizeSnapshot } from "../api/snapshot";
 import type {
   GraphNodeName,
   InterruptPayload,
@@ -66,9 +66,7 @@ export function useRunStream(
         ...prev,
         status: "running",
         currentNode: data.node,
-        completedNodes: prev.completedNodes.includes(data.node)
-          ? prev.completedNodes
-          : [...prev.completedNodes, data.node],
+        completedNodes: completedFromSnapshot(data.output as StateSnapshot),
         snapshot: normalizeSnapshot({
           ...prev.snapshot,
           ...(data.output as StateSnapshot),
@@ -83,9 +81,7 @@ export function useRunStream(
         ...prev,
         status: "awaiting_human",
         currentNode: "human_review",
-        completedNodes: prev.completedNodes.includes("human_review")
-          ? prev.completedNodes
-          : [...prev.completedNodes, "human_review"],
+        completedNodes: completedFromSnapshot(prev.snapshot),
         interrupt: data,
       }));
     });
@@ -102,11 +98,10 @@ export function useRunStream(
         currentNode: TERMINAL_STATUSES.has(data.status)
           ? "finalize"
           : prev.currentNode,
-        completedNodes:
-          TERMINAL_STATUSES.has(data.status) &&
-          !prev.completedNodes.includes("finalize")
-            ? [...prev.completedNodes, "finalize"]
-            : prev.completedNodes,
+        completedNodes: completedFromSnapshot({
+          ...prev.snapshot,
+          status: data.status,
+        }),
       }));
       source.close();
     });
@@ -123,6 +118,7 @@ export function useRunStream(
         status: data.status,
         trace: data.trace,
         snapshot: normalizeSnapshot(data.state_snapshot),
+        completedNodes: completedFromSnapshot(data.state_snapshot),
         currentNode:
           data.state_snapshot.status === "paused"
             ? (data.state_snapshot.resume_node ?? null)

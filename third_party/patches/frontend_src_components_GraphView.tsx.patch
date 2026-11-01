@@ -53,7 +53,7 @@
      </div>
    );
  }
-@@ -39,17 +47,17 @@
+@@ -39,17 +47,18 @@
  const nodeTypes = { step: StepNode };
  
  const LAYOUT: Record<GraphNodeName, { x: number; y: number; label: string }> = {
@@ -69,6 +69,7 @@
 +  analyze: { x: 260, y: 192, label: "4. 分析经营" },
 +  render: { x: 260, y: 256, label: "5. 生成周报" },
 +  quality: { x: 260, y: 320, label: "6. 自动质检" },
++  rework: { x: 10, y: 256, label: "定向返工" },
 +  human_review: { x: 260, y: 384, label: "7. 人工审核" },
 +  finalize: { x: 260, y: 448, label: "8. 交付成果" },
  };
@@ -80,7 +81,7 @@
    const nodes: Node[] = useMemo(
      () =>
        (Object.keys(LAYOUT) as GraphNodeName[]).map((id) => ({
-@@ -60,73 +68,76 @@
+@@ -60,73 +69,91 @@
            label: LAYOUT[id].label,
            active: currentNode === id,
            done: completedNodes.includes(id) && currentNode !== id,
@@ -100,7 +101,22 @@
  
    const edges: Edge[] = useMemo(
      () => [
-       {
++      ...["quality", "human_review"].map((source) => ({
++        id: `${source}-rework`,
++        source,
++        target: "rework",
++        type: "smoothstep",
++        label: "不通过 / 退回",
++        style: { stroke: "#b88a3b" },
++      })),
++      ...["ingest", "evidence", "analyze", "render"].map((target) => ({
++        id: `rework-${target}`,
++        source: "rework",
++        target,
++        type: "smoothstep",
++        style: { stroke: "#b88a3b", strokeDasharray: "4 4" },
++      })),
++      {
 +        id: "render-quality",
 +        source: "render",
 +        target: "quality",
@@ -112,7 +128,7 @@
 +        target: "human_review",
 +        style: edgeStyle(completedNodes.includes("human_review")),
 +      },
-+      {
+       {
          id: "e-ingest-extract",
          source: "ingest",
 -        target: "extract_fields",

@@ -37,4 +37,27 @@ async def test_model(state, store):
         result["conflicts"].append(
             f"{c['region']}纪要所述基本持平（{c['source_id']}）与系统环比 {{{{{c['metric_id']}_change}}}} 不一致，以系统数据为准。"
         )
+    result["revision_responses"] = []
+    for item in state.get("revision_items", []):
+        if item["status"] != "open" or set(item["categories"]) == {"layout"}:
+            continue
+        for section in item["sections"]:
+            addition = "复核时由责任人逐项登记原文与系统记录的差异，核实后再确认结论。"
+            if section == "summary":
+                result[section] += addition
+            elif section == "anomalies" and result[section]:
+                result[section][0]["reason"] += addition
+            elif section in {"actions", "data_notes", "conflicts"}:
+                if result[section]:
+                    result[section][0] += addition
+                else:
+                    result[section].append(addition)
+        result["revision_responses"].append(
+            {
+                "item_id": item["id"],
+                "response": "已补充责任人核对步骤与差异登记说明。",
+                "sections": item["sections"],
+                "source_ids": [],
+            }
+        )
     return result

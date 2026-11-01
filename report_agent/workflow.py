@@ -19,6 +19,7 @@ from langgraph.types import interrupt
 from report_agent.documents import sha256
 from report_agent.model import generate, ground_dates
 from report_agent.models import Review, WorkflowError
+from report_agent.rework import changed_inputs, merge_revision, plan_rework, register_review, verify_revisions
 from report_agent.store import atomic_json, task_path
 
 
@@ -50,6 +51,13 @@ class ReportState(TypedDict, total=False):
     budget_id: str
     active_seconds: float
     delivery: str
+    rework_plan: dict
+    revision_items: list
+    revision_ledger: dict
+    draft_baseline: dict
+    render_options: dict
+    layout_attempts: int
+    work_items: list
 
 
 def build_graph(store, gateway, checkpointer, model=generate):
@@ -57,11 +65,14 @@ def build_graph(store, gateway, checkpointer, model=generate):
         async def node(state):
             started = time.monotonic()
             limits = state["bundle"]["employee"]["limits"]
+            startup = getattr(gateway, "startup_seconds", 0)
+            if gateway is not None:
+                gateway.startup_seconds = 0
             store.event(state["task_id"], "node_started", {"node": name, "version": state["version"]})
             try:
                 if state.get("status") not in {"pending", "running", "approved"}:
                     raise WorkflowError("非法状态，拒绝继续执行", "transition")
-                remaining = limits["active_seconds"] - state.get("active_seconds", 0)
+                remaining = limits["active_seconds"] - state.get("active_seconds", 0) - startup
                 if remaining <= 0:
                     raise WorkflowError("活动执行时长达到上限，已暂停转人工处理", "budget")
                 update = await asyncio.wait_for(fn(state), timeout=remaining)
@@ -88,7 +99,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
                 store.event(
                     state["task_id"], "node_failed", {"node": name, "message": str(error), "kind": error.kind}
                 )
-            elapsed = state.get("active_seconds", 0) + time.monotonic() - started
+            elapsed = state.get("active_seconds", 0) + startup + time.monotonic() - started
             calls = sum(
                 e["kind"] == "model_started" and e["payload"].get("budget_id") == state["budget_id"]
                 for e in store.events(state["task_id"])
@@ -166,11 +177,56 @@ def build_graph(store, gateway, checkpointer, model=generate):
                         }
                     )
         metrics["expected_conflicts"] = conflicts
-        return {"minutes": minutes, "metrics": metrics, "route": "analyze"}
+        work_items = [
+            {"id": "core", "label": "公司、区域核心指标及品类与前五单品", "kind": "metrics"},
+            *(
+                {"id": g["id"], "label": g["label"] + "异常原因与证据", "kind": "anomaly"}
+                for g in metrics["anomalies"]
+            ),
+            *(
+                {
+                    "id": "conflict-" + c["metric_id"],
+                    "label": c["region"] + "纪要与指标冲突",
+                    "kind": "conflict",
+                }
+                for c in conflicts
+            ),
+            {"id": "data-quality", "label": "退货、重复记录及无记录日说明", "kind": "data_quality"},
+        ]
+        return {"minutes": minutes, "metrics": metrics, "work_items": work_items, "route": "analyze"}
 
     async def analyze(s):
         draft = await model(s, store)
-        return {"draft": draft, "model_failures": 0, "route": "render"}
+        return {"draft": merge_revision(s, draft), "model_failures": 0, "route": "render"}
+
+    async def rework(s):
+        plan = plan_rework(s)
+        store.event(s["task_id"], "rework_planned", plan)
+        update = {
+            "rework_plan": plan,
+            "route": plan["route"],
+            "approval": {},
+            "artifact": {},
+            "delivery": "",
+            "draft_baseline": s.get("draft") or s.get("draft_baseline", {}),
+        }
+        if "layout" in plan["categories"]:
+            update["render_options"] = s["bundle"]["employee"].get("rework", {}).get("compact_layout", {})
+            update["layout_attempts"] = s.get("layout_attempts", 0) + 1
+            if set(plan["categories"]) == {"layout"} and s.get("feedback"):
+                update["draft"] = {
+                    **s["draft"],
+                    "review_response": "已按审核意见调整版式，逐项检查结果见修改台账。",
+                }
+        if plan["route"] == "ingest":
+            update.update(
+                status="paused",
+                route="pause",
+                resume_node="ingest",
+                error_kind="materials",
+                reason="数据或统计口径需核实，请补充销售材料、基础资料，或修正周期和字段映射后恢复",
+            )
+        return update
 
     async def render(s):
         from datetime import date, timedelta
@@ -199,7 +255,13 @@ def build_graph(store, gateway, checkpointer, model=generate):
         s = {**s, "draft": ground_dates(s["draft"], s)}
         artifact = await gateway.call(
             "generate_report",
-            {k: s[k] for k in ("task_id", "version", "metrics", "minutes", "draft", "bundle", "feedback")},
+            {
+                **{
+                    k: s[k]
+                    for k in ("task_id", "version", "metrics", "minutes", "draft", "bundle", "feedback")
+                },
+                "render_options": s.get("render_options", {}),
+            },
         )
         return {"artifact": artifact, "draft": s["draft"], "metrics": metrics, "route": "quality"}
 
@@ -209,9 +271,20 @@ def build_graph(store, gateway, checkpointer, model=generate):
             {k: s[k] for k in ("task_id", "artifact", "metrics", "minutes", "draft", "bundle", "feedback")},
         )
         result = await page_inspection(s, result)
+        items, ledger, revision_check = verify_revisions(s, result)
+        result["checks"].append(revision_check)
+        result["passed"] = all(c["passed"] for c in result["checks"])
+        base = task_path(s["task_id"], s["artifact"]["file"]).parent
+        atomic_json(base / "quality.json", result)
+        atomic_json(base / "revisions.json", {"items": items, "ledger": ledger})
         history = s.get("quality_history", []) + [{"version": s["version"], **result}]
         store.event(s["task_id"], "quality", result)
-        common = {"quality": result, "quality_history": history}
+        common = {
+            "quality": result,
+            "quality_history": history,
+            "revision_items": items,
+            "revision_ledger": ledger,
+        }
         if result["passed"]:
             return {
                 **common,
@@ -221,12 +294,17 @@ def build_graph(store, gateway, checkpointer, model=generate):
                 "error_kind": "",
             }
         if s.get("repairs", 0) < s["bundle"]["employee"]["limits"]["quality_repairs"]:
-            return {**common, "repairs": s.get("repairs", 0) + 1, "route": "analyze"}
+            return {
+                **common,
+                "repairs": s.get("repairs", 0) + 1,
+                "route": "rework",
+                "version": s["version"] + 1,
+            }
         return {
             **common,
             "status": "paused",
             "route": "pause",
-            "resume_node": "analyze",
+            "resume_node": "rework",
             "reason": "质检修正达到上限仍未通过，请核实记录后人工处理",
             "error_kind": "quality",
         }
@@ -243,6 +321,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
             "model_calls": 0,
             "repairs": 0,
             "model_failures": 0,
+            "approval": s.get("approval", {}) if s["resume_node"] == "finalize" else {},
         }
         changes = {}
         if reply.get("recheck"):
@@ -250,26 +329,14 @@ def build_graph(store, gateway, checkpointer, model=generate):
                 route="render",
                 version=s["version"] + 1,
                 repairs=s["bundle"]["employee"]["limits"]["quality_repairs"],
+                approval={},
             )
         for key in ("spec", "import_options"):
             if key in reply and reply[key] != s.get(key):
                 changes[key] = reply[key]
-        if reply.get("inputs") or changes:
-            update.update(
-                changes,
-                inputs={**s["inputs"], **reply.get("inputs", {})},
-                route="ingest",
-                status="running",
-                sales={},
-                metrics={},
-                minutes={},
-                draft={},
-                quality={},
-                artifact={},
-                approval={},
-                delivery="",
-                version=s["version"] + (1 if s.get("artifact") else 0),
-            )
+        update.update(changed_inputs(s, reply))
+        if s.get("error_kind") == "quality" and not reply.get("recheck"):
+            update.setdefault("version", s["version"] + 1)
         store.event(
             s["task_id"],
             "resumed",
@@ -311,8 +378,12 @@ def build_graph(store, gateway, checkpointer, model=generate):
         if decision["decision"] == "revise":
             return {
                 "status": "running",
-                "route": "analyze",
+                "route": "rework",
                 "feedback": s["feedback"] + [decision],
+                "revision_items": register_review(s, decision),
+                "draft_baseline": s.get("draft", {}),
+                "quality": {},
+                "layout_attempts": 0,
                 "version": s["version"] + 1,
                 "repairs": 0,
                 "budget_id": uuid.uuid4().hex,
@@ -344,6 +415,10 @@ def build_graph(store, gateway, checkpointer, model=generate):
         base.mkdir(parents=True, exist_ok=True)
         atomic_json(base / "质检记录.json", s["quality_history"])
         atomic_json(base / "审核记录.json", {"feedback": s["feedback"], "approval": s["approval"]})
+        atomic_json(
+            base / "逐项修改记录.json",
+            {"items": s.get("revision_items", []), "ledger": s.get("revision_ledger", {})},
+        )
         atomic_json(base / "配置快照.json", s["bundle"])
         atomic_json(base / "指标与材料来源.json", s["metrics"])
         atomic_json(base / "完整纪要原文.json", s["minutes"])
@@ -388,6 +463,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
         "analyze": analyze,
         "render": render,
         "quality": quality,
+        "rework": rework,
         "finalize": finalize,
     }
     for name, fn in operations.items():

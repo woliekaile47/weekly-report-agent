@@ -5,6 +5,7 @@ export type GraphNodeName =
   | "analyze"
   | "render"
   | "quality"
+  | "rework"
   | "human_review"
   | "finalize";
 export type RunStatus =
@@ -102,6 +103,35 @@ export interface StateSnapshot {
   delivery?: string;
   config_version?: string;
   import_options?: { sheet?: string; fields?: Record<string, string> };
+  rework_plan?: {
+    route: GraphNodeName;
+    categories: string[];
+    sections: string[];
+    reasons: string[];
+    version: number;
+  };
+  revision_items?: {
+    id: string;
+    text: string;
+    categories: string[];
+    sections: string[];
+    status: string;
+    response?: string;
+    verification?: string;
+    before: Record<string, unknown>;
+    before_tokens?: Record<string, string>;
+    after_tokens?: Record<string, string>;
+    after?: Record<string, unknown>;
+    changed_sections?: string[];
+    requested_version: number;
+    verified_version?: number;
+  }[];
+  revision_ledger?: {
+    open_issues: string[];
+    resolved_issues: string[];
+    new_issues: string[];
+  };
+  work_items?: { id: string; label: string; kind: string }[];
 }
 export interface RunSummary {
   id: string;

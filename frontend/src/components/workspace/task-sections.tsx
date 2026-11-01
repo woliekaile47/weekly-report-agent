@@ -12,6 +12,46 @@ type Operation = (
   json?: boolean,
 ) => Promise<void>;
 
+const SECTION_LABELS: Record<string, string> = {
+  summary: "本周摘要",
+  anomalies: "异常与原因",
+  conflicts: "纪要冲突",
+  data_notes: "数据质量说明",
+  actions: "下周关注事项",
+};
+
+function RevisionContent({
+  values,
+  tokens = {},
+}: {
+  values: Record<string, unknown>;
+  tokens?: Record<string, string>;
+}) {
+  if (!Object.keys(values).length)
+    return <p className="text-muted-foreground">版式调整不改动业务正文。</p>;
+  return (
+    <div className="space-y-3">
+      {Object.entries(values).map(([section, value]) => (
+        <div key={section}>
+          <h4 className="font-medium">{SECTION_LABELS[section] ?? section}</h4>
+          <div className="whitespace-pre-wrap break-words text-xs leading-6">
+            {sub(
+              Array.isArray(value)
+                ? value
+                    .map((entry) =>
+                      typeof entry === "string" ? entry : (entry?.reason ?? ""),
+                    )
+                    .join("\n")
+                : String(value ?? "等待生成"),
+              tokens,
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PauseForm({
   state,
   active,
@@ -43,13 +83,15 @@ export function PauseForm({
                   week: Number(data.get("week")),
                 }),
               );
+              const fields = { ...state.import_options?.fields };
+              for (const key of ["amount", "date", "cost"]) {
+                const value = String(data.get(key) ?? "");
+                if (value) fields[key] = value;
+                else delete fields[key];
+              }
               const mapping = {
                 sheet: String(data.get("sheet") ?? ""),
-                fields: Object.fromEntries(
-                  ["amount", "date", "cost"]
-                    .map((k) => [k, String(data.get(k) ?? "")])
-                    .filter(([, v]) => v),
-                ),
+                fields,
               };
               data.set("import_options", JSON.stringify(mapping));
               for (const k of ["sales", "minutes", "master"]) {
@@ -182,6 +224,7 @@ export function TaskOutputs({
             ["progress", "工作进度"],
             ["report", "周报内容"],
             ["quality", "质检记录"],
+            ["revisions", "修改台账"],
             ["materials", "材料识别"],
             ["events", "执行记录"],
             ["workflow", "执行图谱"],
@@ -339,6 +382,66 @@ export function TaskOutputs({
           )}
         </section>
       )}
+      {tab === "revisions" && (
+        <section className="card space-y-4">
+          <h2>审核意见与逐项修改</h2>
+          <p className="text-xs text-muted-foreground">
+            程序核对回应、实际内容差异和引用来源；修改是否充分，仍由审核人确认。
+          </p>
+          {!state.revision_items?.length && (
+            <p className="muted">暂无人工退回意见。</p>
+          )}
+          {state.revision_items?.map((item) => (
+            <article
+              key={item.id}
+              className="rounded-lg border p-4 text-sm space-y-2"
+            >
+              <div className="flex flex-wrap justify-between gap-2">
+                <strong>
+                  {item.id} · {item.text}
+                </strong>
+                <span
+                  className={
+                    item.status === "verified"
+                      ? "text-emerald-700"
+                      : "text-amber-700"
+                  }
+                >
+                  {item.status === "verified"
+                    ? state.status === "completed" ||
+                      state.status === "approved"
+                      ? "已随当前版本审核通过"
+                      : "程序核验通过，待人工确认"
+                    : "待处理"}
+                </span>
+              </div>
+              <p>{item.response || "等待员工回应"}</p>
+              <p className="text-xs text-muted-foreground">
+                {item.verification}
+              </p>
+              <details>
+                <summary className="cursor-pointer">查看修改前后内容</summary>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="min-w-0">
+                    <strong>修改前</strong>
+                    <RevisionContent
+                      values={item.before}
+                      tokens={item.before_tokens}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <strong>修改后</strong>
+                    <RevisionContent
+                      values={item.after ?? {}}
+                      tokens={item.after_tokens}
+                    />
+                  </div>
+                </div>
+              </details>
+            </article>
+          ))}
+        </section>
+      )}
       {tab === "materials" && (
         <section className="card">
           <h2>材料识别与口径</h2>
@@ -444,6 +547,17 @@ export function ReviewForm({
                 decision,
                 reviewer: data.get("reviewer"),
                 feedback: data.get("feedback"),
+                items:
+                  decision === "revise"
+                    ? String(data.get("feedback") ?? "")
+                        .split(/\n/)
+                        .map((text) => text.trim())
+                        .filter(Boolean)
+                        .map((text) => ({
+                          text,
+                          category: String(data.get("category") ?? "auto"),
+                        }))
+                    : [],
                 version: state.version,
               }),
               true,
@@ -467,12 +581,24 @@ export function ReviewForm({
               </select>
             </label>
           </div>
+          {decision === "revise" && (
+            <label>
+              修改类型
+              <select name="category" defaultValue="auto">
+                <option value="auto">按配置识别（可含多类问题）</option>
+                <option value="content">文字与内容</option>
+                <option value="evidence">原因与证据</option>
+                <option value="layout">图表与排版</option>
+                <option value="data">材料与统计口径（需补充材料）</option>
+              </select>
+            </label>
+          )}
           <label>
             审核意见
             <textarea
               name="feedback"
               rows={3}
-              placeholder="退回时请说明需要修改的内容"
+              placeholder="每行填写一条修改意见，将逐项登记、回应并显示修改前后差异"
               required={decision === "revise"}
             />
           </label>

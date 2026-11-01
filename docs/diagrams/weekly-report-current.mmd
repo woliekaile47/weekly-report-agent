@@ -3,7 +3,7 @@ title: 经营周报员工当前主流程
 ---
 flowchart TB
     accTitle: 经营周报员工当前业务流程
-    accDescr: 主流程从上到下，自动修正和人工退回返回分析步骤；缺材料、故障及超限进入暂停。常规分析和异常定位属于同一计算节点的业务展开。
+    accDescr: 主流程从上到下，自动修正和人工退回进入定向返工，再生成文件与重新质检；缺材料、故障及超限进入暂停。常规分析和异常定位属于同一计算节点的业务展开。
 
     START([任务发起]) --> FORM["结构化表单与配置快照<br/>任务名称、ISO 周、业务材料、关注重点"]
     FORM --> INGEST["销售材料准入与清洗<br/>必需字段、基础表、同 ID 重复、负数退货"]
@@ -19,11 +19,11 @@ flowchart TB
     FINALIZE --> DONE(["正式交付<br/>Word、质检记录、来源及审核记录"])
 
     PASS -->|否| LIMIT{"自动修正未达上限？"}
-    LIMIT -->|是：最多 2 轮| REPAIR["带质检问题修正初稿<br/>保留已有指标和纪要"]
-    REPAIR --> ANALYZE
+    LIMIT -->|是：最多 2 轮| REPAIR["按问题类别定向返工<br/>材料、证据、文字或版式<br/>保留未受影响结果，详见返工图"]
+    REPAIR --> RENDER
     LIMIT -->|否| PAUSE["保存检查点并暂停<br/>说明原因、失败步骤及所需操作"]
-    HUMAN -->|退回：意见必填| REVISE["记录意见并创建新版本<br/>携带原稿和意见修改，生成修改说明"]
-    REVISE --> ANALYZE
+    HUMAN -->|退回：意见必填| REVISE["逐项登记意见并创建新版本<br/>记录影响章节和修改前内容"]
+    REVISE --> REPAIR
 
     classDef main fill:#fafaf8,stroke:#777c74,color:#20241f,stroke-width:1px;
     classDef gate fill:#edf0eb,stroke:#4c5847,color:#20241f,stroke-width:1.5px;

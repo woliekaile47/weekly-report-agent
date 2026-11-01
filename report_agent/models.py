@@ -28,6 +28,16 @@ class Anomaly(BaseModel):
     evidence: list[Evidence] = Field(default_factory=list)
 
 
+Section = Literal["summary", "anomalies", "conflicts", "data_notes", "actions"]
+
+
+class RevisionResponse(BaseModel):
+    item_id: str
+    response: str = Field(min_length=1, max_length=1200)
+    sections: list[Section] = Field(min_length=1)
+    source_ids: list[str] = Field(default_factory=list)
+
+
 class Draft(BaseModel):
     summary: str
     anomalies: list[Anomaly]
@@ -35,6 +45,19 @@ class Draft(BaseModel):
     data_notes: list[str] = Field(default_factory=list)
     actions: list[str]
     review_response: str = ""
+    revision_responses: list[RevisionResponse] = Field(default_factory=list)
+
+
+class ReviewItem(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    category: Literal["auto", "data", "evidence", "content", "layout"] = "auto"
+    sections: list[Section] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def nonblank(self):
+        if not self.text.strip():
+            raise ValueError("修改意见不能为空")
+        return self
 
 
 class Review(BaseModel):
@@ -42,11 +65,16 @@ class Review(BaseModel):
     reviewer: str = Field(min_length=1, max_length=80)
     feedback: str = Field(default="", max_length=4000)
     version: int = Field(ge=1)
+    items: list[ReviewItem] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode="after")
     def required_feedback(self):
-        if not self.reviewer.strip() or (self.decision == "revise" and not self.feedback.strip()):
+        if not self.reviewer.strip() or (
+            self.decision == "revise" and not (self.feedback.strip() or self.items)
+        ):
             raise ValueError("请填写审核人；退回时必须填写修改意见")
+        if self.decision == "approve" and self.items:
+            raise ValueError("通过时不能同时提交未处理的修改项")
         return self
 
 

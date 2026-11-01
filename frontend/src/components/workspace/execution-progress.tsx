@@ -16,7 +16,7 @@ import {
 import { money, NODES, pct } from "@/components/ui";
 
 export function ExecutionProgress({ state: s }: { state: StateSnapshot }) {
-  const complete: Record<GraphNodeName, boolean> = {
+  const complete: Partial<Record<GraphNodeName, boolean>> = {
     ingest: !!s.sales,
     calculate: !!s.metrics,
     evidence: !!s.minutes?.sources?.length,
@@ -61,6 +61,20 @@ export function ExecutionProgress({ state: s }: { state: StateSnapshot }) {
   };
   return (
     <div className="space-y-4">
+      {s.rework_plan && (
+        <div
+          className="rounded-lg border px-4 py-3 text-xs leading-6"
+          role="status"
+        >
+          <strong>本轮返工：{NODES[s.rework_plan.route]}</strong>
+          <p className="text-muted-foreground">
+            {s.rework_plan.reasons.join("；")}
+          </p>
+          <p className="text-muted-foreground">
+            复用未受影响的结果，生成后重新质检与人工审核。
+          </p>
+        </div>
+      )}
       <ChainOfThought defaultOpen className="rounded-xl border bg-card/50">
         <ChainOfThoughtHeader
           icon={<ClipboardListIcon className="size-4" />}
@@ -117,6 +131,18 @@ export function ExecutionProgress({ state: s }: { state: StateSnapshot }) {
           })}
         </ChainOfThoughtContent>
       </ChainOfThought>
+      {!!s.work_items?.length && (
+        <details className="rounded-lg border px-4 py-3 text-xs leading-6">
+          <summary className="cursor-pointer">
+            本任务核对清单 · {s.work_items.length} 项
+          </summary>
+          <ul className="mt-2 list-disc space-y-1 pl-4 text-muted-foreground">
+            {s.work_items.map((item) => (
+              <li key={item.id}>{item.label}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <p className="text-xs leading-6 text-muted-foreground">
         {s.model ?? "读取模型配置"} · 模型调用 {s.model_calls ?? 0}/
         {s.limits?.model_calls ?? "—"} 次 · 活动耗时{" "}

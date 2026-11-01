@@ -2,9 +2,11 @@ import asyncio
 import json
 import os
 import sys
+import time
 from contextlib import AsyncExitStack
 from datetime import timedelta
 
+import anyio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -22,11 +24,49 @@ class Gateway:
         self.faults = faults or {}
         self.stack = AsyncExitStack()
         self.session = None
+        self.connection_error = None
+        self.startup_seconds = 0
 
     async def __aenter__(self):
         return self
 
     async def connect(self):
+        """Own SDK cancel scopes in the parent task; failed setup is raised by graph tools."""
+        started = time.monotonic()
+        limits = self.bundle["employee"]["limits"]
+        for attempt in range(limits["tool_retries"] + 1):
+            self.store.event(self.task_id, "mcp_connect_started", {"attempt": attempt + 1})
+            try:
+                if self.faults.get("connect", 0):
+                    if self.faults["connect"] > 0:
+                        self.faults["connect"] -= 1
+                    raise WorkflowError("测试注入：MCP 连接暂时不可用")
+                await self._connect_once()
+                self.connection_error = None
+                return
+            except Exception as exc:
+                await self.stack.aclose()
+                self.stack = AsyncExitStack()
+                self.session = None
+                self.connection_error = WorkflowError(
+                    f"MCP 工具服务连接失败（{type(exc).__name__}），已保存进度，请检查服务后恢复", "execution"
+                )
+                self.store.event(
+                    self.task_id,
+                    "mcp_connect_failed",
+                    {"attempt": attempt + 1, "message": str(self.connection_error)},
+                )
+                if time.monotonic() - started >= limits["active_seconds"]:
+                    self.connection_error = WorkflowError(
+                        "MCP 连接耗时达到活动执行上限，已暂停转人工", "budget"
+                    )
+                    break
+                if attempt < limits["tool_retries"]:
+                    await asyncio.sleep(min(attempt + 1, 2))
+            finally:
+                self.startup_seconds = time.monotonic() - started
+
+    async def _connect_once(self):
         if self.session:
             return
         env = {
@@ -61,8 +101,9 @@ class Gateway:
                 ),
             )
         )
-        await self.session.initialize()
-        discovered = {t.name for t in (await self.session.list_tools()).tools}
+        with anyio.fail_after(self.bundle["employee"]["limits"]["tool_timeout_seconds"]):
+            await self.session.initialize()
+            discovered = {t.name for t in (await self.session.list_tools()).tools}
         if not self.allowed.issubset(discovered):
             raise WorkflowError("MCP 服务缺少允许工具")
 
@@ -73,16 +114,20 @@ class Gateway:
         if name not in self.allowed or ("task_id" in args and args["task_id"] != self.task_id):
             self.store.event(self.task_id, "tool_denied", {"tool": name})
             raise WorkflowError("拒绝越权工具调用", "permission")
+        if self.connection_error:
+            raise self.connection_error
         key = digest(
             {
-                "revision": 2,
+                "revision": 3,
                 "task": self.task_id,
                 "name": name,
                 "args": args,
                 "bundle": self.bundle["version"],
             }
         )
-        cached = self.store.cached(key)
+        # Generated files and their inspection are mutable; never reuse an existence-only cache.
+        cacheable = name not in {"generate_report", "inspect_report"}
+        cached = self.store.cached(key) if cacheable else None
         if cached is not None and (
             not cached.get("file") or task_path(self.task_id, cached["file"]).exists()
         ):
@@ -96,7 +141,8 @@ class Gateway:
                     if self.faults[name] > 0:
                         self.faults[name] -= 1
                     raise WorkflowError("测试注入：工具暂时不可用")
-                await self.connect()
+                if self.session is None:
+                    raise WorkflowError("MCP 连接未建立，请恢复任务重试")
                 response = await self.session.call_tool(name, args)
                 if response.isError:
                     raise WorkflowError("MCP 工具参数或执行错误，请检查输入")
@@ -105,7 +151,8 @@ class Gateway:
                 )
                 if not payload["ok"]:
                     raise WorkflowError(payload["error"], payload["kind"])
-                self.store.cache(key, payload["data"])
+                if cacheable:
+                    self.store.cache(key, payload["data"])
                 self.store.event(self.task_id, "tool_completed", {"tool": name, "attempt": attempt + 1})
                 return payload["data"]
             except Exception as exc:

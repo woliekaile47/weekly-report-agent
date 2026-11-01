@@ -60,12 +60,19 @@ def compute_metrics(
 
 @mcp.tool()
 def generate_report(
-    task_id: str, version: int, metrics: dict, minutes: dict, draft: dict, bundle: dict, feedback: list
+    task_id: str,
+    version: int,
+    metrics: dict,
+    minutes: dict,
+    draft: dict,
+    bundle: dict,
+    feedback: list,
+    render_options: dict | None = None,
 ) -> ToolResult[ArtifactResult]:
     """Render a versioned Word report from a business-editable docxtpl template, with two charts."""
     from report_agent.documents import generate_report as render
 
-    return invoke(render, task_id, version, metrics, minutes, draft, bundle, feedback)
+    return invoke(render, task_id, version, metrics, minutes, draft, bundle, feedback, render_options)
 
 
 @mcp.tool()

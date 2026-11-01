@@ -20,6 +20,7 @@ quality:
   required_sections: [本周摘要, 核心指标, 品类与单品, 异常与原因, 数据质量说明, 下周关注事项]
   forbidden_words: [保证盈利, 内部绝密]
   max_actions: 5
+  max_summary_sentences: 5
 business:
   flat_phrases: [基本持平, 整体持平]
   flat_tolerance_percent: 3
@@ -28,3 +29,43 @@ business:
   duplicate_key: record_id
   duplicate_policy: identical_only
   delivery_requires_human: true
+rework:
+  # 这些业务路由与影响章节可由团队修改；节点及章节取值由程序限制。
+  categories:
+    data:
+      keywords: [销售材料, 销售文件, 统计口径, 周期错误, 字段映射, 重新计算]
+      sections: [summary, anomalies, conflicts, data_notes, actions]
+    evidence:
+      keywords: [纪要, 证据, 原因, 引用, 停业, 缺数, 冲突]
+      sections: [anomalies, conflicts, data_notes, actions]
+    content:
+      keywords: [文字, 摘要, 表述, 内容, 建议, 行动]
+      sections: [summary, anomalies, conflicts, data_notes, actions]
+    layout:
+      keywords: [页数, 图表, 排版, 字体, 表格]
+      sections: []
+  section_keywords:
+    summary: [摘要]
+    anomalies: [异常, 原因]
+    conflicts: [冲突, 持平]
+    data_notes: [数据质量, 停业, 缺数, 退货, 重复]
+    actions: [建议, 行动, 核实步骤]
+  quality_routes:
+    结构完整: {category: layout, sections: []}
+    正文长度: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
+    摘要句数: {category: content, sections: [summary]}
+    指标引用: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
+    正文数字依据: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
+    异常逐项覆盖: {category: evidence, sections: [anomalies]}
+    证据原文可追溯: {category: evidence, sections: [anomalies, conflicts, data_notes, actions]}
+    图表完整: {category: layout, sections: []}
+    行动项与反馈: {category: content, sections: [actions]}
+    纪要与数据冲突提示: {category: evidence, sections: [conflicts]}
+    敏感用语: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
+    表格数值一致: {category: layout, sections: []}
+    文件完整: {category: layout, sections: []}
+    Word实际页数: {category: layout, sections: []}
+  compact_layout:
+    font_points: 8
+    space_after_points: 2
+    line_spacing: 1

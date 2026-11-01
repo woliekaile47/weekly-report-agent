@@ -38,6 +38,12 @@ async def generate(state, store):
         "feedback": state.get("feedback", []),
         "quality_issues": state.get("quality", {}),
         "previous_draft": state.get("draft"),
+        "rework_scope": state.get("rework_plan", {}),
+        "revision_items": [
+            {k: item.get(k) for k in ("id", "text", "sections", "verification")}
+            for item in state.get("revision_items", [])
+            if item["status"] == "open"
+        ],
         "requirements": state["bundle"]["employee"]["quality"],
         "metric_placeholders": {"{{" + k + "}}": v for k, v in metrics["tokens"].items()},
     }

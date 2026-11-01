@@ -53,6 +53,7 @@ const LAYOUT: Record<GraphNodeName, { x: number; y: number; label: string }> = {
   analyze: { x: 260, y: 192, label: "4. 分析经营" },
   render: { x: 260, y: 256, label: "5. 生成周报" },
   quality: { x: 260, y: 320, label: "6. 自动质检" },
+  rework: { x: 10, y: 256, label: "定向返工" },
   human_review: { x: 260, y: 384, label: "7. 人工审核" },
   finalize: { x: 260, y: 448, label: "8. 交付成果" },
 };
@@ -81,6 +82,21 @@ export function GraphView({ currentNode, completedNodes }: GraphViewProps) {
 
   const edges: Edge[] = useMemo(
     () => [
+      ...["quality", "human_review"].map((source) => ({
+        id: `${source}-rework`,
+        source,
+        target: "rework",
+        type: "smoothstep",
+        label: "不通过 / 退回",
+        style: { stroke: "#b88a3b" },
+      })),
+      ...["ingest", "evidence", "analyze", "render"].map((target) => ({
+        id: `rework-${target}`,
+        source: "rework",
+        target,
+        type: "smoothstep",
+        style: { stroke: "#b88a3b", strokeDasharray: "4 4" },
+      })),
       {
         id: "render-quality",
         source: "render",

@@ -37,3 +37,18 @@ tests:
     assert:
       - type: javascript
         value: '(() => { const x=JSON.parse(output); return x.status==="paused" && x.tool_failures===3; })()'
+  - description: 版式退回直接重生成且不调用模型
+    vars: {scenario: layout_rework}
+    assert:
+      - type: javascript
+        value: '(() => { const x=JSON.parse(output); return x.status==="awaiting_human" && x.rework_model_calls===0 && x.revision_items.length===1 && x.revision_items[0].status==="verified"; })()'
+  - description: 两条审核意见均有回应与实际内容修改
+    vars: {scenario: review_items}
+    assert:
+      - type: javascript
+        value: '(() => { const x=JSON.parse(output); return x.status==="awaiting_human" && x.revision_items.length===2 && x.revision_items.every(i=>i.status==="verified"); })()'
+  - description: MCP首次连接故障有限重试并可跨服务实例恢复
+    vars: {scenario: mcp_connection}
+    assert:
+      - type: javascript
+        value: '(() => { const x=JSON.parse(output); return x.initial_status==="paused" && x.connection_failures===3 && x.status==="awaiting_human"; })()'

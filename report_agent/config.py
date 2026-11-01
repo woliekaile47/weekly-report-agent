@@ -19,6 +19,16 @@ def snapshot():
     for name, value in employee["limits"].items():
         if type(value) is not int or value < (0 if name in {"tool_retries", "quality_repairs"} else 1):
             raise ValueError(f"执行限制 {name} 必须是有效整数")
+    rework = employee.get("rework", {})
+    categories = {"data", "evidence", "content", "layout"}
+    sections = {"summary", "anomalies", "conflicts", "data_notes", "actions"}
+    if not set(rework.get("categories", {})).issubset(categories):
+        raise ValueError("返工类别必须是 data、evidence、content 或 layout")
+    for rule in [*rework.get("categories", {}).values(), *rework.get("quality_routes", {}).values()]:
+        if not set(rule.get("sections", [])).issubset(sections):
+            raise ValueError("返工章节包含不受支持的字段")
+        if rule.get("category", "content") not in categories:
+            raise ValueError("质检返工类别不受支持")
     return {
         "employee": employee,
         "columns": yaml.safe_load(files[paths[1]]),

@@ -17,6 +17,7 @@ export const NODES: Record<string, string> = {
   analyze: "分析经营",
   render: "生成周报",
   quality: "自动质检",
+  rework: "登记问题与定向返工",
   human_review: "人工审核",
   finalize: "交付成果",
   pause: "暂停与人工处理",

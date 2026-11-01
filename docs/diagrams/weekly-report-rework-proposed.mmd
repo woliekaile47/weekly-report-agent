@@ -1,30 +1,30 @@
 ---
-title: 定向返工目标流程 待实现
+title: 定向返工与逐项修改核验
 ---
 flowchart TB
-    accTitle: 经营周报员工定向返工目标流程
-    accDescr: 待实现设计。程序依据问题类别选择重算指标、重新核对证据、修改文字或重新生成文件，返工后逐项回应并重新质检，人工重新批准当前版本后方可交付。
+    accTitle: 经营周报员工定向返工实现
+    accDescr: 程序依据配置选择重新准入计算、核对证据、修改章节或重新生成文件。多类问题合并处理，返工后核对逐项回应与实际差异并重新质检，人工重新批准当前版本后方可交付。
 
     INPUT["质检问题或人工退回意见"] --> ITEMS["登记修改项<br/>问题、章节、验收条件及来源"]
     ITEMS --> LIMIT{"修正次数与执行预算充足？"}
     LIMIT -->|否| PAUSE["保存进度并暂停转人工"]
     LIMIT -->|是| ROUTE{"程序选择受影响步骤"}
-    ROUTE -->|销售材料或统计口径变化| DATA["重新准入并计算受影响指标<br/>旧结论与批准记录失效"]
+    ROUTE -->|销售材料或统计口径变化| DATA["暂停请求材料或周期修正<br/>恢复后重新准入或计算指标"]
     ROUTE -->|原因解释或引用不充分| EVIDENCE["重新核对相关证据<br/>修正受影响的分析结论"]
     ROUTE -->|文字表达或内容缺项| TEXT["修改对应段落<br/>保持已核验指标与引用"]
-    ROUTE -->|图表、页数或排版| LAYOUT["调整生成参数或模板<br/>保留已核验分析内容"]
+    ROUTE -->|图表、页数或排版| LAYOUT["应用配置的紧凑排版<br/>保留业务正文，不调用模型"]
     DATA --> EVIDENCE
     EVIDENCE --> TEXT
-    TEXT --> RESPONSE["逐项回应及修改说明<br/>记录修改前后内容、位置与核验结果"]
+    TEXT --> RESPONSE["逐项回应及修改说明<br/>登记修改前后内容与引用来源"]
     LAYOUT --> RESPONSE
     RESPONSE --> RENDER["生成新版本 Word 与图表"]
-    RENDER --> QUALITY{"程序重新质检<br/>原有规则及本次修改项"}
+    RENDER --> QUALITY{"程序重新质检<br/>实际内容差异、逐项回应<br/>文件及业务检查全部通过？"}
     QUALITY -->|不通过| ITEMS
     QUALITY -->|通过| HUMAN{"人工重新审核当前版本"}
     HUMAN -->|退回| ITEMS
     HUMAN -->|通过| DELIVERY["版本与文件摘要校验后交付"]
 
-    classDef planned fill:#fafaf8,stroke:#777c74,color:#20241f,stroke-dasharray:5 4;
+    classDef planned fill:#fafaf8,stroke:#777c74,color:#20241f;
     classDef manual fill:#fff8eb,stroke:#a47d39,color:#3e321e;
     class INPUT,ITEMS,LIMIT,ROUTE,DATA,EVIDENCE,TEXT,LAYOUT,RESPONSE,RENDER,QUALITY,DELIVERY planned;
     class PAUSE,HUMAN manual;

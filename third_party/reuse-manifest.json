@@ -4,7 +4,7 @@
     "upstream_file": "frontend/src/components/GraphView.tsx",
     "local_file": "frontend/src/components/GraphView.tsx",
     "upstream_sha256": "45fd51b8b31a9491515135a23458d7f8f0fc71a12706d11189fd2df5231b9b7b",
-    "adapted_sha256": "371394acee3198774e72dce402c7a53f4923e3d5e111ad020ed1b8175abb86aa",
+    "adapted_sha256": "aef291f5aa89bdf0b4bdf95bc9e356c67435e54f76f24e0d9e558c8a8c5f342f",
     "hash_normalization": "utf-8-lf"
   },
   {
@@ -12,7 +12,7 @@
     "upstream_file": "frontend/src/hooks/useRunStream.ts",
     "local_file": "frontend/src/hooks/useRunStream.ts",
     "upstream_sha256": "9a7f6f042360bc8fa06b3bc85fa5771b73727ef79cd603c1e0347d99c3bf5b5a",
-    "adapted_sha256": "8194f5bf88b19ebe3e7ab6352daf122b44f2b40de3ed47e9e01694cef32e5529",
+    "adapted_sha256": "a6b117b687505986014f4f28f3dbcecd8f7d27c60ab280a04b743caa5d9a8404",
     "hash_normalization": "utf-8-lf"
   },
   {
@@ -20,7 +20,7 @@
     "upstream_file": "backend/app/graph/graph.py",
     "local_file": "report_agent/workflow.py",
     "upstream_sha256": "396a464372d4149c9d26214313e24bdc2c3e6e0b161aced1cd4359ed8e62e659",
-    "adapted_sha256": "2fa8b2a08b4c84846b5c5141bc33831bc0dda96d8b4d0b798a19905dc812539f",
+    "adapted_sha256": "71fc688d58960c87fa8d66a57ed4fc8725a86f7140b2132865938711c34bcc43",
     "hash_normalization": "utf-8-lf"
   },
   {
@@ -353,6 +353,16 @@
     "reuse_kind": "layout_adaptation",
     "upstream_sha256": "f8437af1f97aee83a80d5d7c4452052ea21e699d9c489b30ad3b0a6b04cbbd8c",
     "adapted_sha256": "e6a7b09f99f3deefd92070a9f55ed0f899b2f2e2677bad94eb801ca964e69cb6",
+    "hash_normalization": "utf-8-lf"
+  },
+  {
+    "upstream_project": "agentops-studio",
+    "upstream_commit": "2a12d8095ea19f79c54a5395792f4e8045eb3aec",
+    "upstream_file": "services/context_compaction.py",
+    "local_file": "report_agent/third_party/agentops_ledger.py",
+    "reuse_kind": "revision_ledger_extraction_adaptation",
+    "upstream_sha256": "71fcc046a3d4bbf4ef4699ac5cc45ccea39f484bbb61db3508b29cfb0c63fc94",
+    "adapted_sha256": "d6a325a1c70fc7393adf1aff6e716050e78a2dec765cff762b648a77500639c9",
     "hash_normalization": "utf-8-lf"
   }
 ]

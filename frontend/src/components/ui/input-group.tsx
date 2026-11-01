@@ -70,10 +70,20 @@ function InputGroupAddon({
       data-align={align}
       className={cn(inputGroupAddonVariants({ align }), className)}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest("button")) {
+        // Addons can contain multiple form controls. Let their native clicks,
+        // labels and keyboard activation keep focus on the intended control.
+        if (
+          (e.target as HTMLElement).closest(
+            'input, textarea, select, button, label, a, summary, [contenteditable="true"], [role="button"], [tabindex]',
+          )
+        ) {
           return;
         }
-        e.currentTarget.parentElement?.querySelector("input")?.focus();
+        e.currentTarget.parentElement
+          ?.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+            '[data-slot="input-group-control"]:not(:disabled)',
+          )
+          ?.focus();
       }}
       {...props}
     />

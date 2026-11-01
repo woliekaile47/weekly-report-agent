@@ -122,7 +122,7 @@
     "local_file": "frontend/src/components/ui/input-group.tsx",
     "reuse_kind": "component_adaptation",
     "upstream_sha256": "c9992a5c2e30480e7604d99ac522d8bf3c1b42b73a66612f48fde7527a6e0cab",
-    "adapted_sha256": "82e46f93dcdf47943dab2ebe189a2b3f7259812faaa349eaa4ff02d6cc52f905",
+    "adapted_sha256": "de68e0c9cca563fe4e4b04ad04b79952a023bb8b5dd893a300a7c6447b53ae91",
     "hash_normalization": "utf-8-lf"
   },
   {

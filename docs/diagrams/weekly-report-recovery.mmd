@@ -1,0 +1,30 @@
+---
+title: 公共异常恢复 当前实现与待补项
+---
+flowchart TB
+    accTitle: 经营周报员工公共异常处理与恢复设计
+    accDescr: 临时故障有限重试，材料问题和预算超限直接暂停；恢复时检查材料是否变化，决定从原步骤继续还是重新导入。图外连接故障统一进入暂停属于待完善项。
+
+    EVENT["执行步骤出现异常"] --> TYPE{"程序识别异常类型"}
+    TYPE -->|工具或模型临时故障| RETRY["有限重试<br/>默认最多重试 2 次，共 3 次尝试"]
+    RETRY --> RESULT{"调用成功？"}
+    RESULT -->|是| CONTINUE["接回原步骤，继续执行"]
+    RESULT -->|否：已用完重试| PAUSE["保存检查点并暂停<br/>记录原因、失败步骤、调用记录及恢复入口"]
+    TYPE -->|缺材料、字段歧义、周期不符| PAUSE
+    TYPE -->|模型调用次数或执行时长超限| PAUSE
+    TYPE -->|限流、配置问题或越权工具调用| PAUSE
+    OUTSIDE["待完善：图外 MCP 初始连接等异常<br/>统一转换为可恢复暂停状态"] -.-> PAUSE
+
+    PAUSE --> HUMAN["人工补材料、修正配置或处理故障<br/>预算超限恢复须填写处理人和意见"]
+    HUMAN --> CHANGE{"输入材料或统计参数有变化？"}
+    CHANGE -->|无变化| RESUME["同一任务从保存步骤继续<br/>新的执行预算独立留痕"]
+    CHANGE -->|有变化：当前实现| REIMPORT["返回材料导入<br/>清空派生结果并重新验证、计算"]
+
+    INVALID["非法审核、过期版本、重复执行请求"] --> REJECT["程序拒绝请求<br/>不进入审核或交付"]
+
+    classDef main fill:#fafaf8,stroke:#777c74,color:#20241f;
+    classDef manual fill:#fff8eb,stroke:#a47d39,color:#3e321e;
+    classDef planned fill:#ffffff,stroke:#777c74,color:#53594e,stroke-dasharray:5 4;
+    class EVENT,RETRY,CONTINUE,RESUME,REIMPORT,INVALID,REJECT main;
+    class PAUSE,HUMAN manual;
+    class OUTSIDE planned;

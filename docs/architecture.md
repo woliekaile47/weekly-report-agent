@@ -24,7 +24,7 @@ React工作台 → FastAPI任务服务 → LangGraph StateGraph → 官方MCP客
 | awaiting_human | 当前版本通过 | approved → finalize → completed |
 | awaiting_human | 填写意见退回 | 新版本返回analyze，重新质检和送审 |
 | paused | 明确恢复/补充材料 | 失败节点继续，或重算受影响结果 |
-| running/approved | 进程中断后重启 | 从持久检查点继续 |
+| running/approved | 进程中断后重启服务并明确恢复 | 从持久检查点继续 |
 
 非法审核状态、空退回意见、过期版本、被修改的文件和越权工具调用均拒绝。审核通过绑定版本及SHA-256；模型不能自行进入交付。补充材料或改周期使派生结果失效。纯复检会生成新版本，不调用模型，失败后仍暂停。
 
@@ -67,3 +67,7 @@ SKILL.md具备name/description元信息，以及岗位职责、步骤、注意�
 Windows安装Python、Node.js及Microsoft Word，复制.env.example为.env并填写模型连接，运行start.bat。pytest验证工程路径，eval.ps1执行promptfoo；PUBLIC_DATA_DIR指向企业数据目录。详见README和verification.md。
 
 当前为单用户本地应用，未提供生产身份认证或多租户隔离；Word实际页数检查依赖本机Word；模型可能截断、超时或限流，这些情况暂停而不生成替代成果。自动证据匹配不能证明完整因果关系或业务建议充分，仍需人工审核。企业15条盲测及15分钟现场变更尚未发生，不报告通过率。
+
+## 参赛流程附件
+
+[参赛流程与实现对照](workflow.md)展开常规经营分析、异常定位、Word与图表生成、公共异常处理和状态守卫，并单独给出待实现的定向返工设计。当前自动修正与人工退回均返回分析；补材料或改周期返回导入，尚未实现按问题类型选择最小返工范围。

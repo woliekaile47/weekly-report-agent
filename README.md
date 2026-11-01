@@ -2,6 +2,8 @@
 
 场景 A 的本地工作流型数字员工。复用开源项目的流程与前端组件，使用 LangGraph 编排、Agent Skills 岗位配置、MCP 官方 SDK 工具和 docxtpl 模板，生成可审核交付的 Word 周报。来源、许可证和改动见 [开源复用记录](THIRD_PARTY_NOTICES.md)。
 
+[参赛流程图与状态流转表](docs/workflow.md)包含当前业务流程、公共异常恢复及定向返工目标设计，并标明已实现能力和待完善项。
+
 ## 启动
 
 Windows 需要 Python 3.11+、Node.js 22.12+、Microsoft Word（用于真实页数与 PDF 预览检查）。运行 `start.bat`；首次安装需要网络。浏览器访问 http://127.0.0.1:8501 。

@@ -142,6 +142,7 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
         if table[unique].eq("").any().any() or table.duplicated(unique).any():
             raise WorkflowError(f"{role} 基础表的关联键为空或不唯一", "materials")
         if role == "targets":
+            seen_periods = {}
             for index, row in table.iterrows():
                 try:
                     if not re.fullmatch(r"\d{4}", row["year"]):
@@ -152,6 +153,13 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
                     date.fromisocalendar(year, week, 1)
                     if amount(row["target"]) < 0:
                         raise ValueError("实收目标不能为负数")
+                    period_key = (row["region"], year, week)
+                    if period_key in seen_periods:
+                        raise ValueError(
+                            f"与第 {seen_periods[period_key]} 行的区域、年份和周次重复；"
+                            "44、W44 等写法按同一周处理，请核实目标"
+                        )
+                    seen_periods[period_key] = int(index) + 1
                 except (ValueError, WorkflowError) as exc:
                     raise WorkflowError(
                         f"“{source}”第 {int(index) + 1} 行目标表字段无效："
@@ -238,13 +246,37 @@ def read_minutes(task_id, file):
         raise WorkflowError("周会纪要无法读取，请提供有效 Word 或 UTF-8 文本", "materials") from exc
     if not lines or sum(map(len, lines)) > 60000:
         raise WorkflowError("纪要为空或超过六万字", "materials")
-    # Weekly labels are evidence metadata; detect a clear mismatch, not arbitrary dates in prose.
-    heading = lines[0]
-    week_match = re.search(r"第\s*(\d{1,2})\s*周|(?<!\d)\d{4}\s*[-－]?\s*[Ww]\s*(\d{1,2})(?!\d)", heading)
-    year_match = re.search(r"(?<!\d)(\d{4})\s*年|(?<!\d)(\d{4})\s*[-－]?\s*[Ww]\s*\d{1,2}(?!\d)", heading)
+    # Only title-area period declarations are metadata; ordinary dates in the body are not.
+    periods = []
+    for index, line in enumerate(lines):
+        declared = index == 0 or re.match(
+            r"^\s*(?:统计周期|报告周期|会议周期|周报周期|周期|报告周次)\s*[:：|｜]", line
+        ) or (index < 8 and re.match(
+            r"^\s*(?:\d{4}\s*年?\s*[-－]?\s*[Ww]\d{1,2}|\d{4}\s*年\s*第\s*\d{1,2}\s*周)", line
+        ))
+        if not declared:
+            continue
+        week_match = re.search(
+            r"第\s*(\d{1,2})\s*周|(?<!\d)\d{4}\s*[-－]?\s*[Ww]\s*(\d{1,2})(?!\d)", line
+        )
+        year_match = re.search(
+            r"(?<!\d)(\d{4})\s*年|(?<!\d)(\d{4})\s*[-－]?\s*[Ww]\s*\d{1,2}(?!\d)", line
+        )
+        year = int(year_match[1] or year_match[2]) if year_match else None
+        week = int(week_match[1] or week_match[2]) if week_match else None
+        if year is not None or week is not None:
+            periods.append((index + 1, year, week))
+    years = {year for _, year, _ in periods if year is not None}
+    weeks = {week for _, _, week in periods if week is not None}
+    if len(years) > 1 or len(weeks) > 1:
+        raise WorkflowError(
+            "纪要标题区的年份或周次相互冲突，请核对标题和统计周期："
+            + "；".join(f"第{line}行 {year or '?'}年 第{week or '?'}周" for line, year, week in periods),
+            "materials",
+        )
     return {
-        "week": int(week_match[1] or week_match[2]) if week_match else None,
-        "year": int(year_match[1] or year_match[2]) if year_match else None,
+        "week": next(iter(weeks), None),
+        "year": next(iter(years), None),
         "sources": [{"id": f"M{i:03}", "text": line} for i, line in enumerate(lines, 1)],
     }
 
@@ -285,7 +317,10 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
             cents = amount(row["target"])
             if cents < 0:
                 raise ValueError("实收目标不能为负数")
-            targets[(row["region"], year, week)] = cents
+            key = (row["region"], year, week)
+            if key in targets:
+                raise ValueError("区域、年份和周次规范化后重复，不能覆盖目标")
+            targets[key] = cents
         except (ValueError, WorkflowError) as exc:
             raise WorkflowError(
                 f"目标表第 {index} 行字段无效：年份={row['year']}，"

@@ -118,7 +118,7 @@ class Gateway:
             raise self.connection_error
         key = digest(
             {
-                "revision": 3,
+                "revision": 4,
                 "task": self.task_id,
                 "name": name,
                 "args": args,

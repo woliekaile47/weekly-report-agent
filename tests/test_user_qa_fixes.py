@@ -13,7 +13,8 @@ from report_agent.data_tools import compute_metrics, read_minutes, read_sales
 from report_agent.models import WorkflowError
 
 
-def workbook(*, missing_store=False, duplicate_names=False, negative_target=False, invalid_year=False):
+def workbook(*, missing_store=False, duplicate_names=False, negative_target=False,
+             invalid_year=False, target_rows=None):
     rows = [
         {
             "record_id": f"R{day:02}{store}", "date": str(date(2026, 10, 19) + timedelta(days=day)),
@@ -36,6 +37,8 @@ def workbook(*, missing_store=False, duplicate_names=False, negative_target=Fals
          "target": -700 if negative_target else 700}
         for region in ("东区", "南区")
     ]
+    if target_rows is not None:
+        targets = target_rows
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         for sheet, values in (("销售", rows), ("门店", stores), ("商品", products), ("目标", targets)):
@@ -74,6 +77,46 @@ def test_invalid_target_rows_are_material_errors(field):
         metrics(workbook(**{field: True}))
     assert exc.value.kind == "materials"
     assert "第 2 行" in str(exc.value)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_equivalent_target_week_spellings_cannot_overwrite_each_other(reverse):
+    targets = [
+        {"region": "东区", "year": 2026, "week": 44, "target": 700},
+        {"region": "南区", "year": 2026, "week": 44, "target": 700},
+        {"region": "东区", "year": 2026, "week": "W44", "target": 9999},
+    ]
+    if reverse:
+        targets.reverse()
+    with pytest.raises(WorkflowError, match="重复") as exc:
+        metrics(workbook(target_rows=targets))
+    assert exc.value.kind == "materials"
+
+
+@pytest.mark.parametrize("heading,expected", [
+    ("经营周会纪要\n统计周期：2026W43", (2026, 43)),
+    ("经营周会纪要\n统计周期：2025年第44周", (2025, 44)),
+    ("经营周会纪要\n统计周期：2026-W44", (2026, 44)),
+    ("经营周会纪要\n统计周期 | 2026W43", (2026, 43)),
+    ("经营周会纪要\n" + "会议安排\n" * 9 + "统计周期：2025年第44周", (2025, 44)),
+])
+def test_minutes_period_declared_on_second_line(heading, expected):
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.txt", heading.encode())})
+    result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+    assert (result["year"], result["week"]) == expected
+
+
+def test_conflicting_minutes_headers_pause_without_using_body_dates():
+    text = "2026年第44周纪要\n统计周期：2026W43\n上次讨论 2025年第42周销量。"
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.txt", text.encode())})
+    with pytest.raises(WorkflowError, match="相互冲突") as exc:
+        read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+    assert exc.value.kind == "materials"
+
+    text = "2026年第44周纪要\n本次讨论引用 2025年第42周销量。"
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.txt", text.encode())})
+    result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+    assert (result["year"], result["week"]) == (2026, 44)
 
 
 @pytest.mark.parametrize("heading,year,week", [

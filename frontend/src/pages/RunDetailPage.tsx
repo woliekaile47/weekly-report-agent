@@ -118,6 +118,10 @@ function RunWorkspace({ id }: { id: string }) {
     }
   }
   const active = !!state.worker_active || busy;
+  const lastOperation = [...events].reverse().find((event) => event.kind === "operation_started")?.seq ?? 0;
+  const workerError = [...events].reverse().find(
+    (event) => event.kind === "worker_error" && event.seq > lastOperation,
+  )?.payload.message;
   const chooseFile = (file: TaskFile) => {
     setSelected(file.id);
     setArtifactsOpen(true);
@@ -233,9 +237,9 @@ function RunWorkspace({ id }: { id: string }) {
       </WorkspaceHeader>
       <div className="min-h-0 flex-1 overflow-auto" id="task-scroll">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
-          {(error || loadError) && (
+          {(error || workerError || loadError) && (
             <div role="alert" className="error">
-              {error || loadError}
+              {error || String(workerError || loadError)}
             </div>
           )}
           {!state.task_id && !loadError && (

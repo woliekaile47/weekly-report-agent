@@ -33,6 +33,7 @@ class Source(BaseModel):
 
 
 class MinutesResult(BaseModel):
+    year: int | None = None
     week: int | None
     sources: list[Source]
 

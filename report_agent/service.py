@@ -24,13 +24,25 @@ class Service:
         self.model = model
         self.faults = faults or {}
 
+    @staticmethod
+    def validate_input(role, filename, size):
+        from pathlib import Path
+
+        suffix = Path(filename or "").suffix.lower()
+        allowed = {"sales": {".xlsx", ".csv"}, "minutes": {".docx", ".md", ".txt"}, "master": {".xlsx"}}
+        labels = {"sales": "销售明细", "minutes": "周会纪要", "master": "基础资料"}
+        if role not in allowed or suffix not in allowed[role]:
+            raise WorkflowError(f"{labels.get(role, '上传')}文件类型不支持", "materials")
+        if size <= 0:
+            raise WorkflowError(f"{labels[role]}文件为空", "materials")
+        if size > 20 * 1024 * 1024:
+            raise WorkflowError(f"{labels[role]}文件超过20MB，请选择更小的文件", "materials")
+
     def save_input(self, task_id, role, filename, content):
         from pathlib import Path
 
+        self.validate_input(role, filename, len(content))
         suffix = Path(filename).suffix.lower()
-        allowed = {"sales": {".xlsx", ".csv"}, "minutes": {".docx", ".md", ".txt"}, "master": {".xlsx"}}
-        if role not in allowed or suffix not in allowed[role] or not 0 < len(content) <= 20 * 1024 * 1024:
-            raise WorkflowError("文件类型无效、为空或超过20MB", "materials")
         relative = f"inputs/{role}-{hashlib.sha256(content).hexdigest()[:16]}{suffix}"
         target = task_path(task_id, relative)
         target.parent.mkdir(parents=True, exist_ok=True)

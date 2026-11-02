@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections import Counter
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
@@ -140,6 +141,23 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
         unique = ["region", "year", "week"] if role == "targets" else [key]
         if table[unique].eq("").any().any() or table.duplicated(unique).any():
             raise WorkflowError(f"{role} 基础表的关联键为空或不唯一", "materials")
+        if role == "targets":
+            for index, row in table.iterrows():
+                try:
+                    if not re.fullmatch(r"\d{4}", row["year"]):
+                        raise ValueError("年份须为四位数字")
+                    if not re.fullmatch(r"[Ww]?\d{1,2}", row["week"]):
+                        raise ValueError("周次须为 1 至 53 或 W01 至 W53")
+                    year, week = int(row["year"]), int(row["week"].lstrip("Ww"))
+                    date.fromisocalendar(year, week, 1)
+                    if amount(row["target"]) < 0:
+                        raise ValueError("实收目标不能为负数")
+                except (ValueError, WorkflowError) as exc:
+                    raise WorkflowError(
+                        f"“{source}”第 {int(index) + 1} 行目标表字段无效："
+                        f"年份={row['year']}，周次={row['week']}，实收目标={row['target']}；{exc}",
+                        "materials",
+                    ) from exc
         catalog[role] = table.to_dict("records")
         provenance.append({"role": role, "source": source, "rows": len(table)})
     stores = {r["store_id"]: r for r in catalog["stores"]}
@@ -186,6 +204,7 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
         "records": records,
         "targets": catalog["targets"],
         "stores": catalog["stores"],
+        "products": catalog["products"],
         "removed": removed_rows,
     }
     result_file = f"materials/{digest({'file': file, 'columns': columns, 'options': options, 'master': master_file})[:16]}.json"
@@ -220,9 +239,12 @@ def read_minutes(task_id, file):
     if not lines or sum(map(len, lines)) > 60000:
         raise WorkflowError("纪要为空或超过六万字", "materials")
     # Weekly labels are evidence metadata; detect a clear mismatch, not arbitrary dates in prose.
-    week_match = re.search(r"第\s*(\d{1,2})\s*周", lines[0])
+    heading = lines[0]
+    week_match = re.search(r"第\s*(\d{1,2})\s*周|(?<!\d)\d{4}\s*[-－]?\s*[Ww]\s*(\d{1,2})(?!\d)", heading)
+    year_match = re.search(r"(?<!\d)(\d{4})\s*年|(?<!\d)(\d{4})\s*[-－]?\s*[Ww]\s*\d{1,2}(?!\d)", heading)
     return {
-        "week": int(week_match[1]) if week_match else None,
+        "week": int(week_match[1] or week_match[2]) if week_match else None,
+        "year": int(year_match[1] or year_match[2]) if year_match else None,
         "sources": [{"id": f"M{i:03}", "text": line} for i, line in enumerate(lines, 1)],
     }
 
@@ -255,25 +277,47 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
         raise WorkflowError(
             f"缺少上期 {prev} 至 {start - timedelta(days=1)} 的销售数据，无法计算环比", "materials"
         )
-    targets = {
-        (r["region"], int(r["year"]), int(str(r["week"]).lstrip("Ww"))): amount(r["target"])
-        for r in data["targets"]
-    }
+    targets = {}
+    for index, row in enumerate(data["targets"], 2):
+        try:
+            year, week = int(row["year"]), int(str(row["week"]).lstrip("Ww"))
+            date.fromisocalendar(year, week, 1)
+            cents = amount(row["target"])
+            if cents < 0:
+                raise ValueError("实收目标不能为负数")
+            targets[(row["region"], year, week)] = cents
+        except (ValueError, WorkflowError) as exc:
+            raise WorkflowError(
+                f"目标表第 {index} 行字段无效：年份={row['year']}，"
+                f"周次={row['week']}，实收目标={row['target']}；{exc}", "materials"
+            ) from exc
+    target_regions = {region for region, year, week in targets if (year, week) == (task.year, task.week)}
+    observed_regions = {r["region"] for r in current + old}
+    if missing := sorted(observed_regions - target_regions):
+        raise WorkflowError("缺少本周实收目标：" + "、".join(missing), "materials")
+    store_names = {r["store_id"]: r["store"] for r in data["stores"]}
+    duplicate_store_names = {name for name, count in Counter(store_names.values()).items() if count > 1}
+    product_names = {r["product_id"]: r["product"] for r in data.get("products", rows)}
+    duplicate_product_names = {name for name, count in Counter(product_names.values()).items() if count > 1}
+
+    def display_name(identifier, names, duplicates):
+        name = names[identifier]
+        return f"{name}（{identifier}）" if name in duplicates else name
+
     tokens = {}
     groups = []
 
-    def aggregate(key, label, new, prior, dimension):
+    def aggregate(key, label, new, prior, dimension, region=None):
         value = sum(r["cents"] for r in new)
         previous = sum(r["cents"] for r in prior)
         cost = sum(r["cost_cents"] for r in new)
-        regions = {r["region"] for r in new}
+        no_current_records = dimension in {"region", "store"} and not new
         target = None
-        if dimension in {"total", "region"}:
-            missing = [region for region in regions if (region, task.year, task.week) not in targets]
-            if missing:
-                raise WorkflowError("缺少本周实收目标：" + "、".join(missing), "materials")
-            target = sum(targets[(region, task.year, task.week)] for region in regions)
-        change = ratio(value - previous, previous)
+        if dimension == "total":
+            target = sum(targets[(region, task.year, task.week)] for region in target_regions)
+        elif dimension == "region":
+            target = targets[(region, task.year, task.week)]
+        change = None if no_current_records else ratio(value - previous, previous)
         result = {
             "id": key,
             "label": label,
@@ -282,15 +326,17 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
             "previous_cents": previous,
             "change": change,
             "margin": ratio(value - cost, value),
-            "target_rate": ratio(value, target),
+            "target_rate": None if no_current_records else ratio(value, target),
             "delivery_share": ratio(sum(r["cents"] for r in new if r["channel"] == delivery_channel), value),
             "target_cents": target,
             "rows": len(new),
             "anomaly": change is not None and abs(change) > threshold,
+            "coverage_status": "本期无记录，待核实" if no_current_records else "有记录",
         }
         for field, val in (
             ("amount", money(value)),
-            ("change", f"{change:+.1f}%" if change is not None else "上期为零，不适用"),
+            ("change", "本期无记录，待核实" if no_current_records else
+             f"{change:+.1f}%" if change is not None else "上期为零，不适用"),
             ("margin", f"{result['margin']:.1f}%" if result["margin"] is not None else "不适用"),
             ("target", f"{result['target_rate']:.1f}%" if result["target_rate"] is not None else "不适用"),
         ):
@@ -299,29 +345,40 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
 
     total = aggregate("total", "全公司", current, old, "total")
     for dimension in ("region", "store", "category"):
-        for label in sorted({r[dimension] for r in current + old}):
+        field = "store_id" if dimension == "store" else dimension
+        labels = {r[field] for r in current + old}
+        if dimension == "region":
+            labels |= target_regions
+        for identifier in sorted(labels):
+            label = (display_name(identifier, store_names, duplicate_store_names)
+                     if dimension == "store" else identifier)
             groups.append(
                 aggregate(
                     f"g{len(groups)}",
                     label,
-                    [r for r in current if r[dimension] == label],
-                    [r for r in old if r[dimension] == label],
+                    [r for r in current if r[field] == identifier],
+                    [r for r in old if r[field] == identifier],
                     dimension,
+                    region=identifier if dimension == "region" else None,
                 )
             )
     top = {}
     for row in current:
-        top[row["product"]] = top.get(row["product"], 0) + row["cents"]
+        top[row["product_id"]] = top.get(row["product_id"], 0) + row["cents"]
     anomalies = [g for g in groups if g["dimension"] in {"region", "store"} and g["anomaly"]]
     removed = [r for r in data["removed"] if str(start) <= r["date"] <= str(end)]
     returns = [r for r in current if r["cents"] < 0]
     missing_days = []
-    for store in sorted({r["store"] for r in current}):
-        seen = {r["date"] for r in current if r["store"] == store}
+    for store_id in sorted({r["store_id"] for r in current + old}):
+        seen = {r["date"] for r in current if r["store_id"] == store_id}
         for n in range(7):
             day = (start + timedelta(days=n)).isoformat()
             if day not in seen:
-                missing_days.append({"store": store, "date": day})
+                missing_days.append({
+                    "store_id": store_id,
+                    "store": display_name(store_id, store_names, duplicate_store_names),
+                    "date": day,
+                })
     tokens.update(
         {
             "period": f"{start} 至 {end}",
@@ -373,7 +430,8 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
         "groups": groups,
         "anomalies": anomalies,
         "top_products": [
-            {"product": p, "cents": v} for p, v in sorted(top.items(), key=lambda x: x[1], reverse=True)[:5]
+            {"product_id": p, "product": display_name(p, product_names, duplicate_product_names), "cents": v}
+            for p, v in sorted(top.items(), key=lambda x: (-x[1], x[0]))[:5]
         ],
         "tokens": tokens,
         "period": tokens["period"],

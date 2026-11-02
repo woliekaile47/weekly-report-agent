@@ -150,9 +150,12 @@ def build_graph(store, gateway, checkpointer, model=generate):
         minutes = await gateway.call(
             "read_minutes", {"task_id": s["task_id"], "file": s["inputs"]["minutes"]}
         )
-        if minutes["week"] and minutes["week"] != s["spec"]["week"]:
+        if (minutes.get("year") is not None and minutes["year"] != s["spec"]["year"]) or (
+            minutes["week"] is not None and minutes["week"] != s["spec"]["week"]
+        ):
             raise WorkflowError(
-                f"纪要为第 {minutes['week']} 周，任务是第 {s['spec']['week']} 周，请修正周期或替换纪要",
+                f"纪要为 {minutes.get('year') or '未知年份'} 年第 {minutes['week'] or '未知'} 周，"
+                f"任务是 {s['spec']['year']} 年第 {s['spec']['week']} 周，请修正周期或替换纪要",
                 "materials",
             )
         metrics = dict(s["metrics"])

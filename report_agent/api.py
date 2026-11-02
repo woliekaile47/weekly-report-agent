@@ -67,6 +67,17 @@ def start(task_id, **kwargs):
     tasks[task_id] = asyncio.create_task(worker())
 
 
+async def read_uploads(**files):
+    values = {}
+    for role, file in files.items():
+        if file is None:
+            continue
+        content = await file.read(20 * 1024 * 1024 + 1)
+        service.validate_input(role, file.filename, len(content))
+        values[role] = (file.filename, content)
+    return values
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "version": "2.0"}
@@ -86,11 +97,7 @@ async def create(
     import_options: str = Form("{}"),
 ):
     try:
-        values = {
-            role: (file.filename, await file.read())
-            for role, file in (("sales", sales), ("minutes", minutes), ("master", master))
-            if file
-        }
+        values = await read_uploads(sales=sales, minutes=minutes, master=master)
         task_id = service.create(TaskSpec.model_validate_json(spec), values, json.loads(import_options))
         start(task_id)
         return {"id": task_id, "status": "pending"}
@@ -122,11 +129,7 @@ async def resume(
     try:
         revised = TaskSpec.model_validate_json(spec).model_dump() if spec else None
         options = json.loads(import_options) if import_options else None
-        files = {
-            role: (file.filename, await file.read())
-            for role, file in (("sales", sales), ("minutes", minutes), ("master", master))
-            if file
-        }
+        files = await read_uploads(sales=sales, minutes=minutes, master=master)
         start(
             task_id,
             action="resume" if state["status"] == "paused" else "run",

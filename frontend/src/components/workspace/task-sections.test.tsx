@@ -30,6 +30,26 @@ it("lets a paused task remove an obsolete master workbook", () => {
   expect(data.get("remove_master")).toBe("true");
 });
 
+it("shows an error instead of silently dropping a selected empty replacement file", () => {
+  const onOperation = vi.fn().mockResolvedValue(undefined);
+  render(
+    <PauseForm
+      state={{ status: "paused", error_kind: "materials", spec: { title: "周报", year: 2026, week: 44, focus: "" } }}
+      active={false}
+      onOperation={onOperation}
+    />,
+  );
+  fireEvent.click(screen.getByText("补充材料、调整周期或列映射"));
+  fireEvent.change(screen.getByLabelText("替换销售文件"), {
+    target: { files: [new File([], "empty.csv", { type: "text/csv" })] },
+  });
+  expect(screen.getByRole("alert").textContent).toContain("empty.csv");
+  fireEvent.change(screen.getByLabelText("年份"), { target: { value: "2025" } });
+  fireEvent.click(screen.getByRole("button", { name: "恢复执行" }));
+  expect(screen.getByRole("alert").textContent).toContain("empty.csv");
+  expect(onOperation).not.toHaveBeenCalled();
+});
+
 it("submits separate review items with the selected rework type and current version", () => {
   const onOperation = vi.fn().mockResolvedValue(undefined);
   render(

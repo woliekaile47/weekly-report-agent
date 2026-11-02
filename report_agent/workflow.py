@@ -16,6 +16,7 @@ from typing import TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from report_agent.data_tools import change_exceeds
 from report_agent.documents import sha256
 from report_agent.model import generate, ground_dates
 from report_agent.models import Review, WorkflowError
@@ -168,7 +169,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
                 if (
                     g["label"] in source["text"]
                     and any(p in source["text"] for p in business["flat_phrases"])
-                    and abs(g["change"]) > business["flat_tolerance_percent"]
+                    and change_exceeds(g["cents"], g["previous_cents"], business["flat_tolerance_percent"])
                 ):
                     conflicts.append(
                         {

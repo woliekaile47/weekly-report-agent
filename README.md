@@ -37,7 +37,7 @@ npm.cmd run build --prefix frontend
 
 - `skills/weekly-report/SKILL.md`：岗位职责、工作步骤、注意事项与写作要求。
 - `config/employee.yaml`：工具许可、模型预算、阈值、质检、限制理由，以及返工分类、影响章节和紧凑排版参数。
-- `config/columns.yaml`：销售字段和基础表别名。
+- `config/columns.yaml`：销售字段、基础表别名及允许的渠道名称；未知渠道会暂停任务并提示具体行。
 - `config/reference/*.csv`：企业提供的基础资料，仅用于赛事配置；不含销售流水。
 - `templates/weekly-report.docx`：首次生成后可用 Word 编辑的 docxtpl 模板。
 

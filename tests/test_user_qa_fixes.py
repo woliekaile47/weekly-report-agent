@@ -16,12 +16,16 @@ from report_agent.service import Service
 
 
 def workbook(*, missing_store=False, duplicate_names=False, negative_target=False,
-             invalid_year=False, target_rows=None):
+             invalid_year=False, target_rows=None, current_amounts=None, current_costs=None,
+             channel_override=None):
     rows = [
         {
             "record_id": f"R{day:02}{store}", "date": str(date(2026, 10, 19) + timedelta(days=day)),
-            "store_id": store, "product_id": f"P{store[-1]}", "channel": "外卖", "quantity": 1,
-            "amount": 100 if day < 7 else (120 if store == "S01" else 80), "cost": 40,
+            "store_id": store, "product_id": f"P{store[-1]}",
+            "channel": channel_override if channel_override and day == 7 and store == "S01" else "外卖",
+            "quantity": 1,
+            "amount": 100 if day < 7 else (current_amounts or {}).get(store, 120 if store == "S01" else 80),
+            "cost": 40 if day < 7 else (current_costs or {}).get(store, 40),
         }
         for day in range(14) for store in ("S01", "S02")
         if not (missing_store and day >= 7 and store == "S02")
@@ -71,6 +75,34 @@ def test_same_names_keep_separate_codes_and_anomalies():
     assert {group["label"] for group in stores} == {"同名门店（S01）", "同名门店（S02）"}
     assert len(result["top_products"]) == 2
     assert {product["product_id"] for product in result["top_products"]} == {"P1", "P2"}
+
+
+@pytest.mark.parametrize("amount_value,display,expected", [
+    (110.04, 10.0, True),
+    (89.96, -10.0, True),
+    (110, 10.0, False),
+])
+def test_raw_change_threshold_is_independent_of_display_rounding(amount_value, display, expected):
+    result = metrics(workbook(current_amounts={"S01": amount_value, "S02": 100}))
+    east = next(group for group in result["groups"] if group["dimension"] == "region" and group["label"] == "东区")
+    assert east["change"] == display
+    assert east["anomaly"] is expected
+    assert (east in result["anomalies"]) is expected
+
+
+def test_raw_margin_drop_above_five_points_is_reported_even_if_display_rounds_to_five():
+    result = metrics(workbook(current_amounts={"S01": 100, "S02": 100}, current_costs={"S01": 45.04}))
+    east = next(item for item in result["category_margins"] if item["region"] == "东区")
+    assert (east["previous_margin"], east["margin"]) == (60.0, 55.0)
+
+
+def test_unknown_channel_is_a_material_error_before_delivery_share_is_computed():
+    task_id = service.create({"year": 2026, "week": 44}, {
+        "sales": ("mistyped.xlsx", workbook(channel_override="外麦")),
+    })
+    with pytest.raises(WorkflowError, match="外麦.*允许值.*外卖") as exc:
+        read_sales(task_id, service.store.get(task_id)["inputs"]["sales"], snapshot()["columns"])
+    assert exc.value.kind == "materials"
 
 
 @pytest.mark.parametrize("field", ["negative_target", "invalid_year"])
@@ -188,4 +220,18 @@ def test_resume_oversize_is_rejected_synchronously_without_starting_worker():
     )
     assert response.status_code == 422
     assert "超过20MB" in response.json()["detail"]
+    assert task_id not in tasks
+
+
+def test_resume_empty_file_is_rejected_synchronously_without_starting_worker():
+    task_id = service.create({"year": 2026, "week": 44})
+    state = service.store.get(task_id)
+    state.update(status="paused", reason="缺少销售明细", error_kind="materials")
+    service.store.save(task_id, state)
+    response = TestClient(app).post(
+        f"/api/runs/{task_id}/resume",
+        files={"sales": ("empty.csv", b"", "text/csv")},
+    )
+    assert response.status_code == 422
+    assert "销售明细文件为空" in response.json()["detail"]
     assert task_id not in tasks

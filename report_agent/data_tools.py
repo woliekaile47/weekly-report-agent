@@ -189,6 +189,7 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
         provenance.append({"role": role, "source": source, "rows": len(table)})
     stores = {r["store_id"]: r for r in catalog["stores"]}
     products = {r["product_id"]: r for r in catalog["products"]}
+    allowed_channels = columns.get("allowed_channels", ["堂食自提", columns["delivery_channel"]])
     records = []
     for index, row in frame.iterrows():
         try:
@@ -203,6 +204,12 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
             channel = str(row["channel"]).strip()
             if not channel:
                 raise ValueError()
+            if channel not in allowed_channels:
+                raise WorkflowError(
+                    f"“{sheet}”第 {int(index) + 1} 行渠道“{channel}”不在允许值中："
+                    f"{'、'.join(allowed_channels)}。请核实原始数据或修改字段映射配置。",
+                    "materials",
+                )
             records.append(
                 {
                     "id": str(row["record_id"]),
@@ -312,6 +319,11 @@ def ratio(a, b):
     return None if not b else round(a / b * 100, 1)
 
 
+def change_exceeds(value, previous, threshold):
+    """Compare exact cent amounts; one-decimal ratios are only for display."""
+    return previous != 0 and Decimal(abs(value - previous) * 100) > Decimal(str(threshold)) * abs(previous)
+
+
 def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖", margin_drop_points=5):
     import json
 
@@ -376,6 +388,7 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
         elif dimension == "region":
             target = targets[(region, task.year, task.week)]
         change = None if no_current_records else ratio(value - previous, previous)
+        crosses_change_threshold = not no_current_records and change_exceeds(value, previous, threshold)
         result = {
             "id": key,
             "label": label,
@@ -388,7 +401,7 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
             "delivery_share": ratio(sum(r["cents"] for r in new if r["channel"] == delivery_channel), value),
             "target_cents": target,
             "rows": len(new),
-            "anomaly": change is not None and abs(change) > threshold,
+            "anomaly": crosses_change_threshold,
             "coverage_status": "本期无记录，待核实" if no_current_records else "有记录",
         }
         for field, val in (
@@ -468,9 +481,15 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
             b = [r for r in old if r["region"] == region and r["category"] == category]
             sales_now = sum(r["cents"] for r in a)
             sales_old = sum(r["cents"] for r in b)
-            now = ratio(sales_now - sum(r["cost_cents"] for r in a), sales_now)
-            before = ratio(sales_old - sum(r["cost_cents"] for r in b), sales_old)
-            if now is not None and before is not None and before - now > margin_drop_points:
+            profit_now = sales_now - sum(r["cost_cents"] for r in a)
+            profit_old = sales_old - sum(r["cost_cents"] for r in b)
+            now = ratio(profit_now, sales_now)
+            before = ratio(profit_old, sales_old)
+            raw_drop = (
+                (Decimal(profit_old) / sales_old)
+                - (Decimal(profit_now) / sales_now)
+            ) * 100 if sales_now and sales_old else None
+            if raw_drop is not None and raw_drop > Decimal(str(margin_drop_points)):
                 key = f"margin{len(category_margins)}"
                 category_margins.append(
                     {

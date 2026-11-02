@@ -20,6 +20,12 @@ const SECTION_LABELS: Record<string, string> = {
   actions: "下周关注事项",
 };
 
+const RECOVERY_UPLOAD_LABELS: Record<string, string> = {
+  sales: "销售文件",
+  minutes: "周会纪要",
+  master: "基础资料",
+};
+
 function RevisionContent({
   values,
   tokens = {},
@@ -61,6 +67,7 @@ export function PauseForm({
   active: boolean;
   onOperation: Operation;
 }) {
+  const [uploadError, setUploadError] = useState("");
   return (
     <>
       {state.status === "paused" && (
@@ -72,9 +79,25 @@ export function PauseForm({
           </strong>
           <p>{state.reason}</p>
           <form
+            onChange={(e) => {
+              const input = e.target;
+              if (!(input instanceof HTMLInputElement) || input.type !== "file") return;
+              const invalid = Array.from(e.currentTarget.querySelectorAll<HTMLInputElement>('input[type="file"]'))
+                .find((field) => field.files?.[0]?.size === 0);
+              const file = invalid?.files?.[0];
+              setUploadError(file ? `${RECOVERY_UPLOAD_LABELS[invalid?.name ?? ""]}“${file.name}”为空，请选择非空文件。` : "");
+            }}
             onSubmit={(e) => {
               e.preventDefault();
+              for (const input of e.currentTarget.querySelectorAll<HTMLInputElement>('input[type="file"]')) {
+                const file = input.files?.[0];
+                if (file && file.size === 0) {
+                  setUploadError(`${RECOVERY_UPLOAD_LABELS[input.name]}“${file.name}”为空，请选择非空文件。`);
+                  return;
+                }
+              }
               const data = new FormData(e.currentTarget);
+              setUploadError("");
               data.set(
                 "spec",
                 JSON.stringify({
@@ -96,7 +119,7 @@ export function PauseForm({
               data.set("import_options", JSON.stringify(mapping));
               for (const k of ["sales", "minutes", "master"]) {
                 const f = data.get(k);
-                if (f instanceof File && !f.size) data.delete(k);
+                if (f instanceof File && !f.name) data.delete(k);
               }
               onOperation("resume", data);
             }}
@@ -191,6 +214,7 @@ export function PauseForm({
                 </label>
               </>
             )}
+            {uploadError && <p role="alert" className="error">{uploadError}</p>}
             <button className="primary" disabled={active}>
               恢复执行
             </button>

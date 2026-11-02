@@ -41,7 +41,7 @@ export function UploadPage() {
     );
     for (const k of ["sales", "minutes", "master"]) {
       const f = data.get(k);
-      if (f instanceof File && !f.size) data.delete(k);
+      if (f instanceof File && !f.name) data.delete(k);
     }
     try {
       const r = await request<{ id: string }>("/runs", {

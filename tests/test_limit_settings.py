@@ -57,6 +57,13 @@ def test_invalid_full_configuration_is_rejected_without_changing_saved_files(tmp
     cases = (
         ("config/columns.yaml", "{}", "字段映射 sales"),
         (
+            "config/columns.yaml",
+            baseline["files"]["config/columns.yaml"].replace(
+                "allowed_channels: [堂食自提, 外卖]", "allowed_channels: [堂食自提]"
+            ),
+            "必须包含外卖渠道",
+        ),
+        (
             "config/employee.yaml",
             baseline["files"]["config/employee.yaml"].replace("anomaly_percent: 10", "anomaly_percent: '10%'"),
             "业务阈值 anomaly_percent",

@@ -94,6 +94,13 @@ def validate_files(files):
                 raise ValueError(f"字段映射 {role}.{field} 必须是非空列名列表")
     if not isinstance(columns.get("delivery_channel"), str) or not columns["delivery_channel"].strip():
         raise ValueError("字段映射 delivery_channel 必须填写渠道名称")
+    allowed_channels = columns.get("allowed_channels")
+    if not isinstance(allowed_channels, list) or not allowed_channels or not all(
+        isinstance(channel, str) and channel.strip() for channel in allowed_channels
+    ):
+        raise ValueError("字段映射 allowed_channels 必须是非空渠道名称列表")
+    if len(allowed_channels) != len(set(allowed_channels)) or columns["delivery_channel"] not in allowed_channels:
+        raise ValueError("允许渠道不能重复，且必须包含外卖渠道 delivery_channel")
     rework = employee.get("rework", {})
     if not isinstance(rework, dict):
         raise ValueError("返工规则必须是字段对象")

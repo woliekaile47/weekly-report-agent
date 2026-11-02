@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StrictInt
 
-from report_agent.config import ROOT, connection, snapshot
+from report_agent.config import ROOT, connection, snapshot, validate_files
 from report_agent.models import Review, TaskSpec, WorkflowError
 from report_agent.service import Service
 from report_agent.store import task_path
@@ -120,6 +120,7 @@ async def resume(
     sales: UploadFile | None = File(None),
     minutes: UploadFile | None = File(None),
     master: UploadFile | None = File(None),
+    remove_master: bool = Form(False),
 ):
     state = await get_state(task_id)
     if state["status"] not in {"paused", "running", "pending", "approved"}:
@@ -127,6 +128,8 @@ async def resume(
     if state.get("error_kind") == "budget" and (not handler.strip() or not note.strip()):
         raise HTTPException(422, "超限恢复须填写处理人及意见")
     try:
+        if remove_master and master is not None:
+            raise WorkflowError("不能同时移除和上传基础资料，请只选择一种操作", "materials")
         revised = TaskSpec.model_validate_json(spec).model_dump() if spec else None
         options = json.loads(import_options) if import_options else None
         files = await read_uploads(sales=sales, minutes=minutes, master=master)
@@ -138,6 +141,7 @@ async def resume(
             handler=handler,
             note=note,
             files=files,
+            remove_master=remove_master,
         )
         return {"id": task_id, "status": "running"}
     except (ValueError, WorkflowError) as exc:
@@ -378,7 +382,6 @@ def save_limits(body: LimitsUpdate):
 
 @app.put("/api/config")
 def save_config(body: ConfigUpdate):
-    import yaml
     from filelock import FileLock
 
     with FileLock(ROOT / "config/edit.lock", timeout=3):
@@ -388,20 +391,17 @@ def save_config(body: ConfigUpdate):
         if set(body.files) != set(old["files"]):
             raise HTTPException(422, "只能修改已公开的配置文件")
         try:
-            parsed = yaml.safe_load(body.files["config/employee.yaml"])
-            if any(type(v) is not int or v < 0 for v in parsed["limits"].values()):
-                raise ValueError()
-            yaml.safe_load(body.files["config/columns.yaml"])
-            for key in ["岗位职责", "工作步骤", "注意事项"]:
-                if f"## {key}" not in body.files["skills/weekly-report/SKILL.md"]:
-                    raise ValueError()
+            validate_files(body.files)
+        except (ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(422, f"配置无效：{exc}") from exc
+        try:
             for name, content in body.files.items():
                 (ROOT / name).write_text(content, encoding="utf-8")
             new = snapshot()
         except Exception as exc:
             for name, content in old["files"].items():
                 (ROOT / name).write_text(content, encoding="utf-8")
-            raise HTTPException(422, "配置格式无效，已还原") from exc
+            raise HTTPException(422, f"配置保存失败，已还原：{exc}") from exc
     return {"version": new["version"]}
 
 

@@ -124,7 +124,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
                 "file": s["inputs"]["sales"],
                 "columns": s["bundle"]["columns"],
                 "options": s.get("import_options", {}),
-                "master_file": s["inputs"].get("master", ""),
+                "master_file": s["inputs"].get("master") or "",
             },
         )
         return {"sales": result, "status": "running", "route": "calculate"}

@@ -1,11 +1,34 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ReviewForm, TaskOutputs } from "./task-sections";
+import { PauseForm, ReviewForm, TaskOutputs } from "./task-sections";
 import { completedFromSnapshot } from "@/api/snapshot";
 import type { StateSnapshot } from "@/api/types";
 
 afterEach(cleanup);
+
+it("lets a paused task remove an obsolete master workbook", () => {
+  const onOperation = vi.fn().mockResolvedValue(undefined);
+  render(
+    <PauseForm
+      state={{
+        status: "paused",
+        error_kind: "materials",
+        inputs: { master: "inputs/master-old.xlsx" },
+        spec: { title: "周报", year: 2026, week: 44, focus: "" },
+      }}
+      active={false}
+      onOperation={onOperation}
+    />,
+  );
+  fireEvent.click(screen.getByText("补充材料、调整周期或列映射"));
+  fireEvent.click(screen.getByLabelText(/移除已有基础资料/));
+  fireEvent.click(screen.getByRole("button", { name: "恢复执行" }));
+  expect(onOperation).toHaveBeenCalled();
+  const [path, data] = onOperation.mock.calls[0];
+  expect(path).toBe("resume");
+  expect(data.get("remove_master")).toBe("true");
+});
 
 it("submits separate review items with the selected rework type and current version", () => {
   const onOperation = vi.fn().mockResolvedValue(undefined);

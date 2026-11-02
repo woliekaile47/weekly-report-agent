@@ -42,3 +42,32 @@ def test_editable_limits_preserve_other_rules_and_reject_stale_edits(tmp_path, m
     invalid = client.put("/api/limits", json={**values, "version": saved["version"], "model_calls": 0})
     assert invalid.status_code == 422
     assert client.get("/api/config").json()["version"] == saved["version"]
+
+
+def test_invalid_full_configuration_is_rejected_without_changing_saved_files(tmp_path, monkeypatch):
+    names = ("config/employee.yaml", "config/columns.yaml", "skills/weekly-report/SKILL.md")
+    for relative in names:
+        destination = tmp_path / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes((config.ROOT / relative).read_bytes())
+    monkeypatch.setattr(config, "ROOT", tmp_path)
+    monkeypatch.setattr(api, "ROOT", tmp_path)
+    client = TestClient(api.app)
+    baseline = client.get("/api/config").json()
+    cases = (
+        ("config/columns.yaml", "{}", "字段映射 sales"),
+        (
+            "config/employee.yaml",
+            baseline["files"]["config/employee.yaml"].replace("anomaly_percent: 10", "anomaly_percent: '10%'"),
+            "业务阈值 anomaly_percent",
+        ),
+    )
+    for name, content, detail in cases:
+        response = client.put(
+            "/api/config",
+            json={"version": baseline["version"], "files": {**baseline["files"], name: content}},
+        )
+        assert response.status_code == 422
+        assert detail in response.json()["detail"]
+        assert client.get("/api/config").json()["version"] == baseline["version"]
+        assert (tmp_path / name).read_text(encoding="utf-8") == baseline["files"][name]

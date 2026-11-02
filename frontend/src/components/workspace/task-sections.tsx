@@ -120,6 +120,20 @@ export function PauseForm({
                 name="master"
                 accept=".xlsx"
               />
+              {state.inputs?.master && (
+                <div className="mt-2 flex items-start gap-2 text-sm text-foreground">
+                  <input
+                    id="remove-master"
+                    name="remove_master"
+                    type="checkbox"
+                    value="true"
+                    className="mt-1 size-4 shrink-0"
+                  />
+                  <label htmlFor="remove-master" className="cursor-pointer">
+                    移除已有基础资料。改用完整 Excel 时，系统也会自动移除旧资料。
+                  </label>
+                </div>
+              )}
               <div className="form-grid">
                 <label>
                   年份

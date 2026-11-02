@@ -10,6 +10,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
 from report_agent.config import DATA, snapshot
+from report_agent.data_tools import workbook_has_catalogs
 from report_agent.documents import sha256
 from report_agent.mcp_client import Gateway
 from report_agent.model import generate
@@ -97,6 +98,7 @@ class Service:
         note="",
         spec=None,
         import_options=None,
+        remove_master=False,
     ):
         directory = task_path(task_id)
         directory.mkdir(parents=True, exist_ok=True)
@@ -118,10 +120,18 @@ class Service:
                     raise WorkflowError("只有已暂停任务可以恢复", "transition")
                 if state.get("error_kind") == "budget" and (not handler.strip() or not note.strip()):
                     raise WorkflowError("超限恢复必须填写处理人和处理意见", "transition")
+                if remove_master and (files or {}).get("master"):
+                    raise WorkflowError("不能同时移除和上传基础资料，请只选择一种操作", "materials")
                 updates = {
                     role: self.save_input(task_id, role, name, data)
                     for role, (name, data) in (files or {}).items()
                 }
+                if remove_master:
+                    updates["master"] = None
+                elif state["inputs"].get("master") and "sales" in updates and "master" not in updates:
+                    sales_path = task_path(task_id, updates["sales"])
+                    if workbook_has_catalogs(sales_path, state["bundle"]["columns"]):
+                        updates["master"] = None
                 if action == "recheck" and not state.get("draft"):
                     raise WorkflowError("没有可复检的草稿", "transition")
                 payload = {

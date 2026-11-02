@@ -58,6 +58,7 @@ export interface StateSnapshot {
   task_id?: string;
   status?: RunStatus;
   spec?: { title: string; year: number; week: number; focus: string };
+  inputs?: { sales?: string; minutes?: string; master?: string | null };
   version?: number;
   current_node?: GraphNodeName;
   resume_node?: GraphNodeName;

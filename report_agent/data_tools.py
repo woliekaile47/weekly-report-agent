@@ -56,6 +56,25 @@ def mapped(raw, aliases, overrides=None):
     return None
 
 
+def workbook_has_catalogs(path, columns):
+    """Check whether a replacement sales workbook contains all required master tables."""
+    if path.suffix.lower() != ".xlsx":
+        return False
+    try:
+        sheets = pd.read_excel(path, sheet_name=None, header=None, nrows=16, dtype=str, keep_default_na=False)
+        return all(
+            sum(
+                bool(result and set(columns[role]).issubset(result[0].columns))
+                for raw in sheets.values()
+                for result in [mapped(raw, columns[role])]
+            ) == 1
+            for role in ("stores", "products", "targets")
+        )
+    except Exception:
+        # This is only an early retirement hint. The normal ingest path reports malformed files.
+        return False
+
+
 def read_sales(task_id, file, columns, options=None, master_file=""):
     path = task_path(task_id, file)
     options = options or {}
@@ -249,18 +268,22 @@ def read_minutes(task_id, file):
     # Only title-area period declarations are metadata; ordinary dates in the body are not.
     periods = []
     for index, line in enumerate(lines):
+        # Markdown styling is presentation, while table cells and bold labels can hold period metadata.
+        declaration = re.sub(r"^\s*(?:#{1,6}\s*|[-*+]\s+|\d+[.)]\s+)", "", line)
+        declaration = declaration.strip().strip("|｜ ")
+        declaration = re.sub(r"[*_`]", "", declaration).strip()
         declared = index == 0 or re.match(
-            r"^\s*(?:统计周期|报告周期|会议周期|周报周期|周期|报告周次)\s*[:：|｜]", line
+            r"^\s*(?:统计周期|报告周期|会议周期|周报周期|周期|报告周次)\s*[:：|｜]", declaration
         ) or (index < 8 and re.match(
-            r"^\s*(?:\d{4}\s*年?\s*[-－]?\s*[Ww]\d{1,2}|\d{4}\s*年\s*第\s*\d{1,2}\s*周)", line
+            r"^\s*(?:\d{4}\s*年?\s*[-－]?\s*[Ww]\d{1,2}|\d{4}\s*年\s*第\s*\d{1,2}\s*周)", declaration
         ))
         if not declared:
             continue
         week_match = re.search(
-            r"第\s*(\d{1,2})\s*周|(?<!\d)\d{4}\s*[-－]?\s*[Ww]\s*(\d{1,2})(?!\d)", line
+            r"第\s*(\d{1,2})\s*周|(?<!\d)\d{4}\s*[-－]?\s*[Ww]\s*(\d{1,2})(?!\d)", declaration
         )
         year_match = re.search(
-            r"(?<!\d)(\d{4})\s*年|(?<!\d)(\d{4})\s*[-－]?\s*[Ww]\s*\d{1,2}(?!\d)", line
+            r"(?<!\d)(\d{4})\s*年|(?<!\d)(\d{4})\s*[-－]?\s*[Ww]\s*\d{1,2}(?!\d)", declaration
         )
         year = int(year_match[1] or year_match[2]) if year_match else None
         week = int(week_match[1] or week_match[2]) if week_match else None

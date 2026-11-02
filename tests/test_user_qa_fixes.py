@@ -1,5 +1,6 @@
 """Business regressions reported in the 2026-11-02 user acceptance run."""
 
+import asyncio
 from datetime import date, timedelta
 from io import BytesIO
 
@@ -11,6 +12,7 @@ from report_agent.api import app, service, tasks
 from report_agent.config import snapshot
 from report_agent.data_tools import compute_metrics, read_minutes, read_sales
 from report_agent.models import WorkflowError
+from report_agent.service import Service
 
 
 def workbook(*, missing_store=False, duplicate_names=False, negative_target=False,
@@ -128,6 +130,51 @@ def test_minutes_extract_explicit_year_and_week(heading, year, week):
     task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.txt", heading.encode())})
     result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
     assert (result["year"], result["week"]) == (year, week)
+
+
+@pytest.mark.parametrize("text", [
+    "# 周会纪要\n**统计周期：2026W43**\n需核实门店经营。",
+    "# 周会纪要\n| 字段 | 内容 |\n| --- | --- |\n| 统计周期 | 2026W43 |",
+])
+def test_markdown_period_declaration_is_checked_before_analysis(text):
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.md", text.encode())})
+    result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+    assert (result["year"], result["week"]) == (2026, 43)
+
+
+def test_complete_excel_replacement_retires_old_master_before_ingest():
+    complete = workbook()
+    sheets = pd.read_excel(BytesIO(complete), sheet_name=None)
+    csv = sheets["销售"].to_csv(index=False).encode("utf-8-sig")
+    master = BytesIO()
+    with pd.ExcelWriter(master, engine="openpyxl") as writer:
+        for name in ("门店", "商品", "目标"):
+            sheets[name].to_excel(writer, sheet_name=name, index=False)
+
+    async def no_model(state, store):
+        raise WorkflowError("测试模型边界", "qa_boundary")
+
+    async def run():
+        agent = Service(model=no_model)
+        task_id = agent.create(
+            {"year": 2026, "week": 44},
+            {"sales": ("sales.csv", csv), "master": ("master.xlsx", master.getvalue())},
+        )
+        paused = await agent.operate(task_id)
+        assert paused["status"] == "paused" and paused["error_kind"] == "materials"
+        resumed = await agent.operate(
+            task_id,
+            action="resume",
+            files={
+                "sales": ("complete.xlsx", complete),
+                "minutes": ("minutes.txt", b"2026W44 weekly meeting"),
+            },
+        )
+        assert resumed["inputs"]["master"] is None
+        assert resumed["error_kind"] == "qa_boundary", resumed.get("reason")
+        assert resumed["resume_node"] == "analyze"
+
+    asyncio.run(run())
 
 
 def test_resume_oversize_is_rejected_synchronously_without_starting_worker():

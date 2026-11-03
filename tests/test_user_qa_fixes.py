@@ -1,6 +1,7 @@
 """Business regressions reported in the 2026-11-02 user acceptance run."""
 
 import asyncio
+import json
 import zipfile
 from datetime import date, datetime, timedelta
 from io import BytesIO
@@ -19,6 +20,7 @@ from report_agent.data_tools import (
     parse_sales_day,
     read_minutes,
     read_sales,
+    workbook_has_catalogs,
 )
 from report_agent.documents import inspect_report, sha256
 from report_agent.models import Draft, WorkflowError
@@ -215,6 +217,114 @@ def test_valid_date_range_normalizes_to_iso_week(period):
     result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
     assert (result["year"], result["week"]) == (2026, 44)
     assert result["period_lines"] == [2]
+
+
+@pytest.mark.parametrize("text", [
+    "2026年第44周 / 2026年第43周 周会纪要",
+    "周会纪要\n报告周期：2026-10-26至2026-11-01；2026-10-19至2026-10-25",
+])
+def test_all_periods_on_one_line_must_agree(text):
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.txt", text.encode())})
+    with pytest.raises(WorkflowError, match="冲突") as exc:
+        read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+    assert exc.value.kind == "materials"
+
+
+def test_cross_year_date_range_and_iso_week_agree():
+    text = "统计周期：2025年12月29日至2026年1月4日（2026年第1周）"
+    task_id = service.create({"year": 2026, "week": 1}, {"minutes": ("minutes.txt", text.encode())})
+    result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+    assert (result["year"], result["week"], result["period_start"]) == (2026, 1, "2025-12-29")
+
+
+def test_csv_blank_rows_cannot_hide_trailing_sales_record():
+    header = "记录ID,销售日期,门店编码,商品编码,渠道,销售数量,实收金额,成本金额\n"
+
+    def row(key, day, value):
+        return f"{key},{day},SH01,B01,外卖,1,{value},0\n"
+
+    data = (header + row("R1", "2026-10-19", 100) + row("R2", "2026-10-26", 1400)
+            + ",,,,,,,\n" * 100_018 + row("R3", "2026-10-27", 99999)).encode("utf-8-sig")
+    task_id = service.create({"year": 2026, "week": 44}, {"sales": ("sales.csv", data)})
+    state = service.store.get(task_id)
+    parsed = read_sales(task_id, state["inputs"]["sales"], snapshot()["columns"])
+    result = compute_metrics(task_id, parsed, state["spec"])
+    assert parsed["rows"] == 3
+    assert result["total"]["cents"] == 10_139_900
+
+
+@pytest.mark.parametrize("date_value", [
+    "2026年10月26日",
+    str(to_excel(datetime(2026, 10, 26), CALENDAR_WINDOWS_1900)),
+    "2026-10-25T17:00:00Z",
+])
+def test_duplicate_date_uses_normalized_business_day(date_value):
+    sheets = pd.read_excel(BytesIO(workbook()), sheet_name=None)
+    row = sheets["销售"].loc[sheets["销售"]["record_id"] == "R07S01"].iloc[0].copy()
+    row["date"] = date_value
+    sheets["销售"].loc[sheets["销售"]["record_id"] == "R07S01", "date"] = date_value
+    sheets["销售"] = pd.concat([sheets["销售"], pd.DataFrame([row])], ignore_index=True)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for name, values in sheets.items():
+            values.to_excel(writer, sheet_name=name, index=False)
+    task_id = service.create({"year": 2026, "week": 44}, {"sales": ("sales.xlsx", output.getvalue())})
+    state = service.store.get(task_id)
+    parsed = read_sales(task_id, state["inputs"]["sales"], snapshot()["columns"])
+    normalized = json.loads(task_path(task_id, parsed["file"]).read_text(encoding="utf-8"))
+    result = compute_metrics(task_id, parsed, state["spec"])
+    assert normalized["removed"] == [{"date": "2026-10-26", "cents": 12000}]
+    assert result["quality"]["removed_count"] == 1
+    assert result["quality"]["removed_cents"] == 12000
+
+
+def test_excel_precheck_is_shared_by_master_and_catalog_detection(monkeypatch, tmp_path):
+    import report_agent.data_tools as data_tools
+
+    sheets = pd.read_excel(BytesIO(workbook()), sheet_name=None)
+    master = BytesIO()
+    with pd.ExcelWriter(master, engine="openpyxl") as writer:
+        for name in ("门店", "商品", "目标"):
+            sheets[name].to_excel(writer, sheet_name=name, index=False)
+    master_path = tmp_path / "master.xlsx"
+    master_path.write_bytes(master.getvalue())
+    sales = sheets["销售"].to_csv(index=False).encode("utf-8-sig")
+    task_id = service.create({"year": 2026, "week": 44}, {
+        "sales": ("sales.csv", sales), "master": ("master.xlsx", master.getvalue()),
+    })
+    state = service.store.get(task_id)
+    checked = []
+    original = data_tools.inspect_office_archive
+
+    def inspect(path, *args, **kwargs):
+        checked.append(path)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(data_tools, "inspect_office_archive", inspect)
+    read_sales(task_id, state["inputs"]["sales"], snapshot()["columns"],
+               master_file=state["inputs"]["master"])
+    assert task_path(task_id, state["inputs"]["master"]) in checked
+    assert workbook_has_catalogs(master_path, snapshot()["columns"])
+    assert master_path in checked
+
+
+def test_oversized_master_archive_is_rejected_before_excel_parser(tmp_path):
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        for number in range(501):
+            archive.writestr(f"xl/worksheets/part{number}.xml", "x")
+    master_path = tmp_path / "master.xlsx"
+    master_path.write_bytes(output.getvalue())
+    assert not workbook_has_catalogs(master_path, snapshot()["columns"])
+    sales = pd.read_excel(BytesIO(workbook()), sheet_name="销售").to_csv(index=False).encode("utf-8-sig")
+    task_id = service.create({"year": 2026, "week": 44}, {
+        "sales": ("sales.csv", sales), "master": ("master.xlsx", output.getvalue()),
+    })
+    state = service.store.get(task_id)
+    with pytest.raises(WorkflowError, match="资源上限") as exc:
+        read_sales(task_id, state["inputs"]["sales"], snapshot()["columns"],
+                   master_file=state["inputs"]["master"])
+    assert exc.value.kind == "materials"
 
 
 def test_word_table_period_is_read_in_document_order_and_conflicts_with_title():

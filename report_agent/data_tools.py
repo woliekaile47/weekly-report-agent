@@ -76,6 +76,59 @@ def inspect_office_archive(path, max_uncompressed=256 * 1024 * 1024):
         raise WorkflowError("Office 文件压缩结构无效，请检查文件是否损坏", "materials") from exc
 
 
+def read_excel_safely(path, *, nrows=None):
+    """Apply the same archive and worksheet bounds to every Excel upload path."""
+    from openpyxl import load_workbook
+
+    inspect_office_archive(path)
+    workbook = load_workbook(path, read_only=True)
+    try:
+        epoch = workbook.epoch
+        if any(
+            (sheet.max_row or 0) > 110_000 or (sheet.max_column or 0) > 200
+            for sheet in workbook.worksheets
+        ) or sum(
+            (sheet.max_row or 0) * (sheet.max_column or 0)
+            for sheet in workbook.worksheets
+        ) > 4_000_000:
+            raise WorkflowError("Excel 工作表行列规模超过解析上限", "materials")
+    finally:
+        workbook.close()
+    return pd.read_excel(
+        path, sheet_name=None, header=None, nrows=nrows, dtype=str, keep_default_na=False
+    ), epoch
+
+
+def read_csv_complete(path):
+    """Stream to EOF; discarded blank rows must never hide valid trailing records."""
+    def load(encoding):
+        parts = []
+        nonempty_count = 0
+        reader = pd.read_csv(
+            path, header=None, dtype=str, keep_default_na=False,
+            encoding=encoding, chunksize=10_000,
+        )
+        try:
+            for chunk in reader:
+                nonempty = chunk.apply(lambda col: col.str.strip().ne("")).any(axis=1)
+                useful = chunk.loc[nonempty]
+                nonempty_count += len(useful)
+                # Header plus up to 15 introductory rows and 100,000 sales records.
+                if nonempty_count > 100_016:
+                    raise WorkflowError("CSV 有效行数超过 100000 条明细上限，请拆分或精简文件", "materials")
+                if not useful.empty:
+                    parts.append(useful)
+        finally:
+            reader.close()
+        # Preserve parser row indices so validation errors still identify the source row.
+        return pd.concat(parts) if parts else pd.DataFrame()
+
+    try:
+        return load("utf-8-sig")
+    except UnicodeDecodeError:
+        return load("gb18030")
+
+
 def mapped(raw, aliases, overrides=None):
     overrides = overrides or {}
     for offset in range(min(15, len(raw))):
@@ -106,7 +159,7 @@ def workbook_has_catalogs(path, columns):
     if path.suffix.lower() != ".xlsx":
         return False
     try:
-        sheets = pd.read_excel(path, sheet_name=None, header=None, nrows=16, dtype=str, keep_default_na=False)
+        sheets, _ = read_excel_safely(path, nrows=16)
         return all(
             sum(
                 bool(result and set(columns[role]).issubset(result[0].columns))
@@ -126,40 +179,17 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
     excel_epoch = None
     try:
         if path.suffix == ".xlsx":
-            from openpyxl import load_workbook
-
-            inspect_office_archive(path)
-            workbook = load_workbook(path, read_only=True)
-            excel_epoch = workbook.epoch
-            if any((sheet.max_row or 0) > 110_000 or (sheet.max_column or 0) > 200
-                   for sheet in workbook.worksheets) or sum(
-                (sheet.max_row or 0) * (sheet.max_column or 0) for sheet in workbook.worksheets
-            ) > 4_000_000:
-                workbook.close()
-                raise WorkflowError("Excel 工作表行列规模超过解析上限", "materials")
-            workbook.close()
-            sheets = pd.read_excel(path, sheet_name=None, header=None, dtype=str, keep_default_na=False)
+            sheets, excel_epoch = read_excel_safely(path)
         elif path.suffix == ".csv":
-            try:
-                frame = pd.read_csv(path, header=None, dtype=str, keep_default_na=False,
-                                    encoding="utf-8-sig", nrows=100_017)
-            except UnicodeDecodeError:
-                frame = pd.read_csv(path, header=None, dtype=str, keep_default_na=False,
-                                    encoding="gb18030", nrows=100_017)
-            sheets = {"CSV": frame}
+            sheets = {"CSV": read_csv_complete(path)}
         else:
             raise WorkflowError("销售资料只支持 XLSX、CSV", "materials")
         if master_file:
+            master_sheets, _ = read_excel_safely(task_path(task_id, master_file))
             sheets.update(
                 {
                     f"基础资料/{k}": v
-                    for k, v in pd.read_excel(
-                        task_path(task_id, master_file),
-                        sheet_name=None,
-                        header=None,
-                        dtype=str,
-                        keep_default_na=False,
-                    ).items()
+                    for k, v in master_sheets.items()
                 }
             )
     except WorkflowError:
@@ -293,7 +323,9 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
                 f"“{sheet}”第 {int(index) + 1} 行日期/数量无效或门店/商品编码无法关联", "materials"
             ) from exc
     removed_rows = [
-        {"date": str(row["date"])[:10], "cents": amount(row["amount"])} for _, row in removed.iterrows()
+        {"date": parse_sales_day(row["date"], excel_epoch).isoformat(),
+         "cents": amount(row["amount"])}
+        for _, row in removed.iterrows()
     ]
     normalized = {
         "records": records,
@@ -358,13 +390,15 @@ def read_minutes(task_id, file):
         ))
         if not declared:
             continue
-        dates = re.search(
+        date_ranges = re.finditer(
             r"(?<!\d)(\d{4})\s*[年/-]\s*(\d{1,2})\s*[月/-]\s*(\d{1,2})\s*日?\s*"
             r"(?:至|到|~|～|—|–|－)\s*"
             r"(?:(\d{4})\s*[年/-]\s*)?(\d{1,2})\s*[月/-]\s*(\d{1,2})\s*日?(?!\d)",
             declaration,
         )
-        if dates:
+        found_range = False
+        for dates in date_ranges:
+            found_range = True
             try:
                 begin = date(int(dates[1]), int(dates[2]), int(dates[3]))
                 finish = date(int(dates[4] or dates[1]), int(dates[5]), int(dates[6]))
@@ -373,23 +407,22 @@ def read_minutes(task_id, file):
             except ValueError as exc:
                 raise WorkflowError(f"纪要第 {index + 1} 行日期范围无效：{exc}", "materials") from exc
             periods.append((index + 1, begin.isocalendar().year, begin.isocalendar().week))
-        week_match = re.search(
-            r"第\s*(\d{1,2})\s*周|(?<!\d)\d{4}\s*[-－]?\s*[Ww]\s*(\d{1,2})(?!\d)", declaration
-        )
-        year_match = re.search(
-            r"(?<!\d)(\d{4})\s*年|(?<!\d)(\d{4})\s*[-－]?\s*[Ww]\s*\d{1,2}(?!\d)", declaration
-        )
-        year = int(year_match[1] or year_match[2]) if year_match else None
-        week = int(week_match[1] or week_match[2]) if week_match else None
-        if week is not None and year is None:
-            raise WorkflowError(f"纪要第 {index + 1} 行只有周次，缺少年份", "materials")
-        if year is not None and week is not None:
+        year_weeks = list(re.finditer(
+            r"(?<!\d)(\d{4})\s*(?:年\s*第\s*(\d{1,2})\s*周|年?\s*[-－]?\s*[Ww]\s*(\d{1,2}))(?!\d)",
+            declaration,
+        ))
+        for bare_week in re.finditer(r"第\s*\d{1,2}\s*周", declaration):
+            if not any(match.start() <= bare_week.start() and bare_week.end() <= match.end()
+                       for match in year_weeks):
+                raise WorkflowError(f"纪要第 {index + 1} 行只有周次，缺少年份", "materials")
+        for match in year_weeks:
+            year, week = int(match[1]), int(match[2] or match[3])
             try:
                 date.fromisocalendar(year, week, 1)
             except ValueError as exc:
                 raise WorkflowError(f"纪要第 {index + 1} 行 ISO 年周无效", "materials") from exc
             periods.append((index + 1, year, week))
-        elif explicit and not dates:
+        if explicit and not found_range and not year_weeks:
             raise WorkflowError(f"纪要第 {index + 1} 行统计周期无法识别，请写明 ISO 年周或完整日期范围", "materials")
     if not periods:
         raise WorkflowError("纪要缺少可确认的统计周期，请在标题或统计周期字段写明 ISO 年周", "materials")

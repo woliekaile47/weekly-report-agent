@@ -74,7 +74,7 @@ it("keeps focus on year and week while clicking, typing and using arrow keys", a
 
 it("shows required upload guidance and rejects invalid files beside the picker", () => {
   openForm();
-  expect(screen.getByText(/须包含所选周及上一周的销售记录/)).toBeTruthy();
+  expect(screen.getByText(/上传一份销售文件，文件内须包含所选周及上一周的记录/)).toBeTruthy();
   expect(screen.getByText(/纪要周期须与所选周一致/)).toBeTruthy();
   expect(screen.getByText("补充基础资料（可选）")).toBeTruthy();
   const sales = screen.getByLabelText("销售明细");

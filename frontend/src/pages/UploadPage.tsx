@@ -134,7 +134,7 @@ export function UploadPage() {
                     label="销售明细"
                     accept=".xlsx,.csv"
                     required
-                    hint="支持 .xlsx、.csv，单个文件不超过 20MB；须包含所选周及上一周的销售记录。"
+                    hint="支持 .xlsx、.csv，单个文件不超过 20MB；上传一份销售文件，文件内须包含所选周及上一周的记录。"
                   />
                   <AttachmentInput
                     name="minutes"

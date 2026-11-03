@@ -14,8 +14,13 @@ import {
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { AttachmentInput } from "@/components/workspace/attachment-input";
 import { useSettingsDialog } from "@/components/workspace/settings-context";
+import { describeIsoWeek, isoWeekStart, lastCompleteIsoWeek } from "@/lib/iso-week";
 
 export function UploadPage() {
+  const [defaultPeriod] = useState(lastCompleteIsoWeek);
+  const [year, setYear] = useState(String(defaultPeriod.year));
+  const [week, setWeek] = useState(String(defaultPeriod.week));
+  const validPeriod = isoWeekStart(Number(year), Number(week)) !== null;
   const { openSettings } = useSettingsDialog();
   const client = useQueryClient();
   const { data: config } = useQuery({
@@ -89,7 +94,8 @@ export function UploadPage() {
                     type="number"
                     min={2000}
                     max={2100}
-                    defaultValue={2026}
+                    defaultValue={defaultPeriod.year}
+                    onChange={(event) => setYear(event.target.value)}
                     required
                     className="bg-transparent! px-2! text-sm!"
                   />
@@ -101,12 +107,16 @@ export function UploadPage() {
                     type="number"
                     min={1}
                     max={53}
-                    defaultValue={44}
+                    defaultValue={defaultPeriod.week}
+                    onChange={(event) => setWeek(event.target.value)}
                     required
                     className="bg-transparent! px-2! text-sm!"
                   />
                 </label>
               </InputGroupAddon>
+              <p role="status" className="px-4 pt-2 text-xs font-medium text-foreground">
+                {describeIsoWeek(Number(year), Number(week))}
+              </p>
               <InputGroupTextarea
                 aria-label="重点关注"
                 name="focus"
@@ -124,24 +134,24 @@ export function UploadPage() {
                     label="销售明细"
                     accept=".xlsx,.csv"
                     required
+                    hint="支持 .xlsx、.csv，单个文件不超过 20MB；须包含所选周及上一周的销售记录。"
                   />
                   <AttachmentInput
                     name="minutes"
                     label="本周周会纪要"
                     accept=".docx,.txt,.md"
                     required
+                    hint="支持 .docx、.txt、.md，单个文件不超过 20MB；纪要周期须与所选周一致。"
                   />
                 </div>
                 <details className="w-full text-xs text-muted-foreground">
                   <summary className="w-fit cursor-pointer">
-                    补充基础资料与格式说明
+                    补充基础资料（可选）
                   </summary>
                   <div className="space-y-3 pt-3">
                     <p className="text-xs leading-6">
-                      销售明细支持 Excel、CSV；纪要支持
-                      Word、TXT、Markdown。单个文件最多 20
-                      MB。环比分析需在销售文件中包含上期记录。Excel
-                      可包含销售、门店、商品和目标表；CSV 使用已配置的基础资料。
+                      Excel 可在同一工作簿包含销售、门店、商品和目标表；CSV
+                      使用已配置的基础资料。需要替换基础表时，可在这里上传单独的 Excel 工作簿。
                     </p>
                     <AttachmentInput
                       name="master"
@@ -166,7 +176,7 @@ export function UploadPage() {
                   <Button
                     type="submit"
                     className="h-9 rounded-full px-4"
-                    disabled={busy}
+                    disabled={busy || !validPeriod}
                   >
                     {busy ? (
                       <LoaderIcon className="size-4 animate-spin" />

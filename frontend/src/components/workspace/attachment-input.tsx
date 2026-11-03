@@ -8,11 +8,13 @@ export function AttachmentInput({
   label,
   accept,
   required = false,
+  hint,
 }: {
   name: string;
   label: string;
   accept: string;
   required?: boolean;
+  hint?: string;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -35,8 +37,18 @@ export function AttachmentInput({
         aria-label={label}
         onChange={(e) => {
           const next = e.target.files?.[0] ?? null;
-          if (next && (next.size > 20 * 1024 * 1024 || next.size === 0)) {
-            setError("请选择非空且不超过 20 MB 的文件");
+          const formats = accept.split(",").map((format) => format.trim().toLowerCase());
+          const issue = next && (
+            !formats.some((format) => next.name.toLowerCase().endsWith(format))
+              ? `仅支持 ${formats.join("、")} 格式。`
+              : next.size === 0
+                ? `${next.name} 为空，请选择非空文件。`
+                : next.size > 20 * 1024 * 1024
+                  ? `${next.name} 超过 20MB，请选择更小的文件。`
+                  : ""
+          );
+          if (issue) {
+            setError(issue);
             e.target.value = "";
             setFile(null);
             return;
@@ -84,6 +96,7 @@ export function AttachmentInput({
           <span className="text-xs">选择{label}</span>
         </Button>
       )}
+      {hint && <p className="text-xs leading-5 text-muted-foreground">{hint}</p>}
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}

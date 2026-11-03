@@ -77,8 +77,8 @@ describe("checkpoint rendering regression", () => {
     expect(screen.getAllByText(paused.reason!).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: "等待周报成果" })).toBeTruthy();
     fireEvent.click(screen.getByText("补充材料、调整周期或列映射"));
-    expect(screen.getByLabelText("替换销售文件")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "恢复执行" })).toBeTruthy();
+    expect(screen.getByLabelText("替换或补充销售明细")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "上传销售明细并继续" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "提交审核决定" })).toBeNull();
   });
 
@@ -112,7 +112,7 @@ describe("checkpoint rendering regression", () => {
               : paused,
         }) as Response,
     );
-    fireEvent.click(screen.getByRole("button", { name: "恢复执行" }));
+    fireEvent.click(screen.getByRole("button", { name: "上传销售明细并继续" }));
     await screen.findByRole("alert");
     const before = vi.mocked(fetch).mock.calls.length;
     await waitFor(

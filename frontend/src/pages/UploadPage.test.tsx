@@ -94,10 +94,10 @@ it("blocks a nonexistent ISO week while keeping manual period editing available"
   fireEvent.change(screen.getByLabelText("年份"), { target: { value: "2021" } });
   fireEvent.change(screen.getByLabelText("周次"), { target: { value: "53" } });
   expect(screen.getByText("请输入有效的 ISO 年份和周次。")).toBeTruthy();
-  expect((screen.getByRole("button", { name: "开始生成" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "发起任务" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText("周次"), { target: { value: "52" } });
   expect(screen.getByText(describeIsoWeek(2021, 52))).toBeTruthy();
-  expect((screen.getByRole("button", { name: "开始生成" }) as HTMLButtonElement).disabled).toBe(false);
+  expect((screen.getByRole("button", { name: "发起任务" }) as HTMLButtonElement).disabled).toBe(false);
 });
 
 it("serializes the edited period with the unchanged task title", async () => {
@@ -109,7 +109,7 @@ it("serializes the edited period with the unchanged task title", async () => {
   // Check the period payload here; native file selection and validated form
   // submission are exercised in Edge/Chrome against the built workspace.
   fireEvent.submit(
-    screen.getByRole("button", { name: "开始生成" }).closest("form")!,
+    screen.getByRole("button", { name: "发起任务" }).closest("form")!,
   );
   await screen.findByText("任务已提交");
   const call = vi.mocked(request).mock.calls.find(([path]) => path === "/runs");
@@ -119,4 +119,33 @@ it("serializes the edited period with the unchanged task title", async () => {
     year: 2025,
     week: 12,
   });
+});
+
+it("A-03 allows a minutes-only task to reach backend admission", async () => {
+  const user = openForm();
+  await user.upload(screen.getByLabelText("本周周会纪要"), new File(["2026W44 周会纪要"], "minutes.md"));
+  expect((screen.getByLabelText("本周周会纪要") as HTMLInputElement).files?.[0]?.name).toBe("minutes.md");
+  await user.click(screen.getByRole("button", { name: "发起任务" }));
+  await screen.findByText("任务已提交");
+  const call = vi.mocked(request).mock.calls.find(([path]) => path === "/runs");
+  const body = call?.[1]?.body as FormData;
+  expect((body.get("minutes") as File).name).toBe("minutes.md");
+  expect(body.get("sales")).toBeNull();
+});
+
+it("A-05 allows a sales-only week-46 task to reach backend admission", async () => {
+  const user = openForm();
+  await user.clear(screen.getByLabelText("年份"));
+  await user.type(screen.getByLabelText("年份"), "2026");
+  await user.clear(screen.getByLabelText("周次"));
+  await user.type(screen.getByLabelText("周次"), "46");
+  await user.upload(screen.getByLabelText("销售明细"), new File(["sample"], "sales.csv"));
+  expect((screen.getByLabelText("销售明细") as HTMLInputElement).files?.[0]?.name).toBe("sales.csv");
+  await user.click(screen.getByRole("button", { name: "发起任务" }));
+  await screen.findByText("任务已提交");
+  const call = vi.mocked(request).mock.calls.find(([path]) => path === "/runs");
+  const body = call?.[1]?.body as FormData;
+  expect(JSON.parse(String(body.get("spec"))).week).toBe(46);
+  expect((body.get("sales") as File).name).toBe("sales.csv");
+  expect(body.get("minutes")).toBeNull();
 });

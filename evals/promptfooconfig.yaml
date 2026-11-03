@@ -32,6 +32,11 @@ tests:
     assert:
       - type: javascript
         value: '(() => { const x=JSON.parse(output); return x.status==="paused" && x.reason.includes("2026-11-01") && !x.total; })()'
+  - description: 纪要周期冲突在模型分析前暂停
+    vars: {scenario: minutes_period_mismatch}
+    assert:
+      - type: javascript
+        value: '(() => { const x=JSON.parse(output); return x.status==="paused" && x.reason.includes("纪要") && x.model_calls===0; })()'
   - description: 工具故障三次后暂停
     vars: {scenario: tool_failure}
     assert:

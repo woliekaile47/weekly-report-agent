@@ -5,6 +5,7 @@ import { FileInput, MetricsTable, NODES, pct, sub } from "@/components/ui";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { UserRoundCheckIcon } from "lucide-react";
+import { reportStageLabel } from "@/lib/report-stage";
 
 type Operation = (
   path: string,
@@ -68,6 +69,30 @@ export function PauseForm({
   onOperation: Operation;
 }) {
   const [uploadError, setUploadError] = useState("");
+  const reason = state.reason ?? "";
+  const missingSales = !state.inputs?.sales;
+  const showSales = missingSales || /销售明细|销售文件|实际覆盖/.test(reason);
+  const showMinutes = /纪要/.test(reason) || (state.resume_node === "evidence" && !state.inputs?.minutes);
+  const showPeriod = /周期|周次|实际覆盖/.test(reason);
+  const salesField = <FileInput label="替换或补充销售明细" name="sales" accept=".xlsx,.csv" />;
+  const minutesField = <FileInput label="替换或补充周会纪要" name="minutes" accept=".docx,.txt,.md" />;
+  const periodFields = (
+    <div className="form-grid">
+      <label>年份<input name="year" type="number" defaultValue={state.spec?.year} /></label>
+      <label>ISO 周<input name="week" type="number" defaultValue={state.spec?.week} /></label>
+    </div>
+  );
+  const nextStep = missingSales
+    ? "上传销售明细并继续。系统将校验所选周及上一周记录。"
+    : showPeriod
+      ? "核对所选周期与材料覆盖范围；可修改周次或替换材料后继续。"
+      : showMinutes
+        ? "上传与所选周一致的纪要后继续。"
+        : state.error_kind === "rate_limit" || state.error_kind === "model"
+          ? "模型服务暂不可用；确认服务恢复后重试当前步骤。"
+          : state.quality?.passed === false
+            ? "查看未通过的质检项，补充或修改材料后复检。"
+            : "问题处理完成后从已保存的步骤继续。";
   return (
     <>
       {state.status === "paused" && (
@@ -78,6 +103,14 @@ export function PauseForm({
               : "任务已暂停"}
           </strong>
           <p>{state.reason}</p>
+          <div className="mt-3 space-y-1 text-sm">
+            <strong>下一步</strong>
+            <p>{nextStep}</p>
+            {showPeriod && <p>所选周期：{state.spec?.year} 年第 {state.spec?.week} 周{state.sales && `；销售覆盖：${state.sales.date_start} 至 ${state.sales.date_end}`}{state.minutes?.year && `；纪要识别：${state.minutes.year} 年第 ${state.minutes.week} 周`}</p>}
+            {state.quality?.passed === false && state.quality.checks?.filter((check) => !check.passed).map((check) => (
+              <p key={check.name}>未通过：{check.name}。{check.details}</p>
+            ))}
+          </div>
           <form
             onChange={(e) => {
               const input = e.target;
@@ -118,25 +151,26 @@ export function PauseForm({
               };
               data.set("import_options", JSON.stringify(mapping));
               for (const k of ["sales", "minutes", "master"]) {
-                const f = data.get(k);
-                if (f instanceof File && !f.name) data.delete(k);
+                const input = e.currentTarget.elements.namedItem(k) as HTMLInputElement | null;
+                const selected = input?.files?.[0];
+                if (selected) data.set(k, selected);
+                else data.delete(k);
               }
               onOperation("resume", data);
             }}
           >
+            {(showSales || showMinutes) && (
+              <div className="uploads">
+                {showSales && salesField}
+                {showMinutes && minutesField}
+              </div>
+            )}
+            {showPeriod && periodFields}
             <details>
               <summary>补充材料、调整周期或列映射</summary>
               <div className="uploads">
-                <FileInput
-                  label="替换销售文件"
-                  name="sales"
-                  accept=".xlsx,.csv"
-                />
-                <FileInput
-                  label="补充纪要"
-                  name="minutes"
-                  accept=".docx,.txt,.md"
-                />
+                {!showSales && salesField}
+                {!showMinutes && minutesField}
               </div>
               <FileInput
                 label="基础资料（可选）"
@@ -157,23 +191,8 @@ export function PauseForm({
                   </label>
                 </div>
               )}
+              {!showPeriod && periodFields}
               <div className="form-grid">
-                <label>
-                  年份
-                  <input
-                    name="year"
-                    type="number"
-                    defaultValue={state.spec?.year}
-                  />
-                </label>
-                <label>
-                  ISO 周
-                  <input
-                    name="week"
-                    type="number"
-                    defaultValue={state.spec?.week}
-                  />
-                </label>
                 <label>
                   明细工作表
                   <input
@@ -216,7 +235,7 @@ export function PauseForm({
             )}
             {uploadError && <p role="alert" className="error">{uploadError}</p>}
             <button className="primary" disabled={active}>
-              恢复执行
+              {missingSales ? "上传销售明细并继续" : showMinutes ? "上传纪要并继续" : state.error_kind === "rate_limit" || state.error_kind === "model" ? "重试当前步骤" : "恢复执行"}
             </button>
             {state.draft && state.error_kind !== "budget" && (
               <button
@@ -293,7 +312,7 @@ export function TaskOutputs({
               <div className="section-heading">
                 <h2>本周摘要</h2>
                 <span className="tag">
-                  {state.status === "completed" ? "已交付版本" : "待审核草稿"}
+                  {reportStageLabel(state)}
                 </span>
               </div>
               <p>{sub(draft.summary, tokens)}</p>
@@ -361,14 +380,15 @@ export function TaskOutputs({
                   <li key={i}>{sub(a, tokens)}</li>
                 ))}
               </ul>
-              {draft.data_notes?.length > 0 && (
+              {(state.report_quality_notes?.length || draft.data_notes?.length > 0) && (
                 <>
                   <h2>数据质量说明</h2>
-                  {draft.data_notes.map((n, i) => (
+                  {(state.report_quality_notes ?? draft.data_notes ?? []).map((n, i) => (
                     <p key={i}>{sub(n, tokens)}</p>
                   ))}
                 </>
               )}
+              <p className="muted">网页展示报告内容；请以右侧 PDF 预览核对最终 Word 排版。</p>
               {draft.review_response && (
                 <div className="notice">
                   <strong>修改说明</strong>

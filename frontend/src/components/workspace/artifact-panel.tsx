@@ -18,6 +18,7 @@ import {
 } from "@/components/ai-elements/artifact";
 import { ArtifactFileList } from "./artifact-file-list";
 import { Button } from "@/components/ui/button";
+import { reportStageLabel } from "@/lib/report-stage";
 
 const PdfPreview = lazy(() => import("./pdf-preview"));
 
@@ -83,7 +84,7 @@ export function ArtifactPanel({
             <>
               <p className="text-xs leading-6 text-muted-foreground">
                 {state.artifact
-                  ? `当前版本 ${state.version} · ${state.status === "completed" ? "已交付" : state.status === "paused" ? "暂停中的草稿" : state.status === "awaiting_human" ? "待审核草稿" : "草稿"}`
+                  ? `当前版本 ${state.version} · ${reportStageLabel(state)}`
                   : "上传的材料和后续成果会显示在这里。"}
               </p>
               {files.length ? (

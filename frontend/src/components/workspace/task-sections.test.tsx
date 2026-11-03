@@ -23,7 +23,7 @@ it("lets a paused task remove an obsolete master workbook", () => {
   );
   fireEvent.click(screen.getByText("补充材料、调整周期或列映射"));
   fireEvent.click(screen.getByLabelText(/移除已有基础资料/));
-  fireEvent.click(screen.getByRole("button", { name: "恢复执行" }));
+  fireEvent.click(screen.getByRole("button", { name: "上传销售明细并继续" }));
   expect(onOperation).toHaveBeenCalled();
   const [path, data] = onOperation.mock.calls[0];
   expect(path).toBe("resume");
@@ -40,14 +40,42 @@ it("shows an error instead of silently dropping a selected empty replacement fil
     />,
   );
   fireEvent.click(screen.getByText("补充材料、调整周期或列映射"));
-  fireEvent.change(screen.getByLabelText("替换销售文件"), {
+  fireEvent.change(screen.getByLabelText("替换或补充销售明细"), {
     target: { files: [new File([], "empty.csv", { type: "text/csv" })] },
   });
   expect(screen.getByRole("alert").textContent).toContain("empty.csv");
   fireEvent.change(screen.getByLabelText("年份"), { target: { value: "2025" } });
-  fireEvent.click(screen.getByRole("button", { name: "恢复执行" }));
+  fireEvent.click(screen.getByRole("button", { name: "上传销售明细并继续" }));
   expect(screen.getByRole("alert").textContent).toContain("empty.csv");
   expect(onOperation).not.toHaveBeenCalled();
+});
+
+it("shows a direct next step and coverage for an out-of-range sales task", () => {
+  render(<PauseForm
+    state={{
+      status: "paused", error_kind: "materials", resume_node: "calculate",
+      reason: "第 46 周没有销售数据；上传资料实际覆盖 2026-10-19 至 2026-11-01",
+      spec: { title: "周报", year: 2026, week: 46, focus: "" },
+      inputs: { sales: "inputs/sales.xlsx" },
+      sales: { sheet: "销售", rows: 2, raw_rows: 2, removed_duplicates: 0, mapping: {}, date_start: "2026-10-19", date_end: "2026-11-01" },
+    }}
+    active={false} onOperation={vi.fn()}
+  />);
+  expect(screen.getByText(/所选周期：2026 年第 46 周；销售覆盖：2026-10-19 至 2026-11-01/)).toBeTruthy();
+  expect(screen.getByLabelText("ISO 周")).toBeTruthy();
+  expect(screen.getByLabelText("替换或补充销售明细")).toBeTruthy();
+});
+
+it("keeps failed QA out of the awaiting-review label and shows Word quality notes", () => {
+  render(<TaskOutputs id="test" tab="report" setTab={() => {}} events={[]} progress={null} workflow={null}
+    state={{
+      status: "paused", quality: { passed: false, checks: [{ name: "数字依据", passed: false, details: "待修正" }] },
+      draft: { summary: "摘要", anomalies: [], conflicts: [], data_notes: [], actions: ["行动"], review_response: "" },
+      report_quality_notes: ["本期退货 11 笔，合计 -260 元，已直接冲减系统实收。"],
+    }} />);
+  expect(screen.getByText("质检未通过，仅供查看")).toBeTruthy();
+  expect(screen.getByText(/本期退货 11 笔/)).toBeTruthy();
+  expect(screen.queryByText("待审核草稿")).toBeNull();
 });
 
 it("submits separate review items with the selected rework type and current version", () => {

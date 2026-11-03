@@ -12,7 +12,7 @@ from docx import Document
 from fastapi.testclient import TestClient
 from openpyxl.utils.datetime import CALENDAR_WINDOWS_1900, to_excel
 
-from report_agent.api import app, service, tasks
+from report_agent.api import app, public, service, tasks
 from report_agent.config import snapshot
 from report_agent.data_tools import (
     compute_metrics,
@@ -22,7 +22,7 @@ from report_agent.data_tools import (
     read_sales,
     workbook_has_catalogs,
 )
-from report_agent.documents import inspect_report, sha256
+from report_agent.documents import inspect_report, report_quality_notes, sha256
 from report_agent.models import Draft, WorkflowError
 from report_agent.service import Service
 from report_agent.store import task_path
@@ -79,6 +79,20 @@ def test_missing_region_preserves_company_target_and_marks_store_dates():
     assert len([day for day in result["quality"]["missing_days"] if day["store_id"] == "S02"]) == 7
     south = next(group for group in result["groups"] if group["dimension"] == "store" and group["label"] == "S02")
     assert south["change"] is None and south["coverage_status"] == "本期无记录，待核实"
+
+
+def test_review_workspace_uses_word_data_quality_prose():
+    task_id = service.create({"year": 2026, "week": 44}, {"sales": ("sales.xlsx", workbook())})
+    state = service.store.get(task_id)
+    parsed = read_sales(task_id, state["inputs"]["sales"], snapshot()["columns"])
+    computed = compute_metrics(task_id, parsed, state["spec"])
+    draft = {"summary": "本周经营摘要", "anomalies": [], "actions": ["复核数据"], "data_notes": ["核对门店记录。"]}
+    notes = report_quality_notes(computed, draft)
+    shown = public({**state, "metrics": computed, "draft": draft})["report_quality_notes"]
+    assert shown == notes
+    assert any("剔除" in note for note in shown)
+    assert any("退货" in note for note in shown)
+    assert shown[-1] == "核对门店记录。"
 
 
 def test_same_names_keep_separate_codes_and_anomalies():

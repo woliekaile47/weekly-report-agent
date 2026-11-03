@@ -45,6 +45,8 @@ def call_api(prompt, options, context):
         files = {"sales": ("sales.xlsx", (folder / "销售明细.xlsx").read_bytes())}
         if week != 46:
             files["minutes"] = ("minutes.docx", (folder / f"周会纪要_2026W{week}.docx").read_bytes())
+        if case == "minutes_period_mismatch":
+            files["minutes"] = ("minutes.docx", (folder / "周会纪要_2026W43.docx").read_bytes())
         if case == "A-03":
             files.pop("sales")
         tid = service.create({"year": 2026, "week": week}, files)
@@ -83,6 +85,7 @@ def call_api(prompt, options, context):
             "model_source": "test replacement, not live",
             "task_id": tid,
             "status": state["status"],
+            "model_calls": len(model_requests),
             "initial_status": initial,
             "reason": state.get("reason", ""),
             "total": metrics.get("total"),

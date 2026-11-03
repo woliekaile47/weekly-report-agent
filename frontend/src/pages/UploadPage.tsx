@@ -45,8 +45,10 @@ export function UploadPage() {
       }),
     );
     for (const k of ["sales", "minutes", "master"]) {
-      const f = data.get(k);
-      if (f instanceof File && !f.name) data.delete(k);
+      const input = e.currentTarget.elements.namedItem(k) as HTMLInputElement | null;
+      const selected = input?.files?.[0];
+      if (selected) data.set(k, selected);
+      else data.delete(k);
     }
     try {
       const r = await request<{ id: string }>("/runs", {
@@ -69,7 +71,7 @@ export function UploadPage() {
           <div className="text-center">
             <h1 className="text-2xl font-medium">新建经营周报</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              上传销售明细和本周纪要，完成后在这里审核。
+              上传销售明细和本周纪要；材料不齐也可发起，任务会暂停并提示补充。
             </p>
           </div>
           <form onSubmit={submit} className="space-y-3">
@@ -133,14 +135,12 @@ export function UploadPage() {
                     name="sales"
                     label="销售明细"
                     accept=".xlsx,.csv"
-                    required
                     hint="支持 .xlsx、.csv，单个文件不超过 20MB；上传一份销售文件，文件内须包含所选周及上一周的记录。"
                   />
                   <AttachmentInput
                     name="minutes"
                     label="本周周会纪要"
                     accept=".docx,.txt,.md"
-                    required
                     hint="支持 .docx、.txt、.md，单个文件不超过 20MB；纪要周期须与所选周一致。"
                   />
                 </div>
@@ -183,7 +183,7 @@ export function UploadPage() {
                     ) : (
                       <ArrowUpIcon className="size-4" />
                     )}
-                    <span>{busy ? "正在上传…" : "开始生成"}</span>
+                    <span>{busy ? "正在提交…" : "发起任务"}</span>
                   </Button>
                 </div>
               </InputGroupAddon>

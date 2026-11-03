@@ -92,8 +92,9 @@ export interface StateSnapshot {
     }[];
     anomalies: Metric[];
   };
-  minutes?: { week?: number; sources: { id: string; text: string }[] };
+  minutes?: { year?: number; week?: number; sources: { id: string; text: string }[] };
   draft?: Draft;
+  report_quality_notes?: string[];
   feedback?: { reviewer: string; feedback: string; version: number }[];
   quality?: {
     passed: boolean;

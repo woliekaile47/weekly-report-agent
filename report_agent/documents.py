@@ -143,6 +143,26 @@ def percent(value, sign=False):
     return (f"{value:+.1f}%" if sign else f"{value:.1f}%") if value is not None else "不适用"
 
 
+def report_quality_notes(metrics, draft):
+    """One source for Word data-quality prose and the review workspace."""
+    q = metrics["quality"]
+    notes = [
+        f"本期按记录ID剔除 {q['removed_count']} 条相同重复上传记录，实收合计 {money(q['removed_cents'])} 元；全文件共剔除 {metrics['import_summary']['removed_duplicates']} 条，冲突记录不会自动合并。",
+        f"本期退货 {q['return_count']} 笔，合计 {money(q['return_cents'])} 元，已直接冲减系统实收。",
+    ]
+    if q["missing_days"]:
+        grouped = {}
+        for row in q["missing_days"]:
+            grouped.setdefault(row["store"], []).append(row["date"][5:])
+        notes.append(
+            "无系统记录日期："
+            + "；".join(f"{store} {'、'.join(days)}" for store, days in grouped.items())
+            + "。停业、未开业与系统缺失需结合纪要区分，未用估计金额补账。"
+        )
+    notes.extend(substitute(item, metrics["tokens"]) for item in draft.get("data_notes", []))
+    return notes
+
+
 def generate_report(task_id, version, metrics, minutes, draft, bundle, feedback, render_options=None):
     template = ROOT / "templates/weekly-report.docx"
     if not template.exists():
@@ -162,21 +182,7 @@ def generate_report(task_id, version, metrics, minutes, draft, bundle, feedback,
         reason = ("原因待核实：" if item["uncertain"] else "") + substitute(item["reason"], tokens)
         reason += " " + " ".join(f"[{e['source_id']}]" for e in item["evidence"])
         anomalies.append({"label": g["label"], "change": percent(g["change"], True), "reason": reason})
-    q = metrics["quality"]
-    notes = [
-        f"本期按记录ID剔除 {q['removed_count']} 条相同重复上传记录，实收合计 {money(q['removed_cents'])} 元；全文件共剔除 {metrics['import_summary']['removed_duplicates']} 条，冲突记录不会自动合并。",
-        f"本期退货 {q['return_count']} 笔，合计 {money(q['return_cents'])} 元，已直接冲减系统实收。",
-    ]
-    if q["missing_days"]:
-        grouped = {}
-        for r in q["missing_days"]:
-            grouped.setdefault(r["store"], []).append(r["date"][5:])
-        notes.append(
-            "无系统记录日期："
-            + "；".join(f"{k} {'、'.join(v)}" for k, v in grouped.items())
-            + "。停业、未开业与系统缺失需结合纪要区分，未用估计金额补账。"
-        )
-    notes.extend(substitute(x, tokens) for x in draft.get("data_notes", []))
+    notes = report_quality_notes(metrics, draft)
     prose = "\n".join(
         [
             draft["summary"],

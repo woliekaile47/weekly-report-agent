@@ -80,7 +80,7 @@ def main():
                         if task["status"] == "paused" and not task.get("draft"):
                             expect(page.get_by_role("heading", name="等待周报成果")).to_be_attached()
                             page.get_by_text("补充材料、调整周期或列映射", exact=True).click()
-                            expect(page.get_by_label("替换销售文件", exact=True)).to_be_visible()
+                            expect(page.get_by_label("替换或补充销售明细", exact=True)).to_be_visible()
                             assert page.get_by_role("button", name="提交审核决定").count() == 0
                         if task["status"] == "awaiting_human":
                             expect(page.get_by_role("button", name="提交审核决定")).to_be_attached()
@@ -210,11 +210,13 @@ def main():
                             route.continue_()
                             return
                         body = route.request.post_data_buffer
-                        assert b'name="sales"; filename=' in body
-                        assert b'name="minutes"; filename=' in body
-                        assert b'"year":2026' in body and b'"week":44' in body
+                        has_sales = b'name="sales"; filename=' in body
+                        has_minutes = b'name="minutes"; filename=' in body
+                        assert b'"year":2026' in body
+                        assert (has_sales, has_minutes) in {(False, True), (True, False), (True, True)}
+                        assert (b'"week":46' if has_sales and not has_minutes else b'"week":44') in body
                         # CDP omits file bytes from multipart post_data_buffer.
-                        writes.append(True)
+                        writes.append((has_sales, has_minutes))
                         route.fulfill(
                             status=422,
                             content_type="application/json",
@@ -235,18 +237,25 @@ def main():
                         };
                     })();""")
                     page.goto(BASE, wait_until="networkidle")
-                    page.get_by_role("button", name="开始生成", exact=True).click()
-                    assert not writes, "Missing files must not submit a new task"
+                    page.get_by_label("本周周会纪要", exact=True).set_input_files(str(minutes))
+                    page.get_by_role("button", name="发起任务", exact=True).click()
+                    expect(page.get_by_role("alert")).to_contain_text("浏览器验证已阻止写入")
+                    page.goto(BASE, wait_until="networkidle")
+                    page.get_by_label("销售明细", exact=True).set_input_files(str(sales))
+                    page.get_by_label("周次", exact=True).fill("46")
+                    page.get_by_role("button", name="发起任务", exact=True).click()
+                    expect(page.get_by_role("alert")).to_contain_text("浏览器验证已阻止写入")
+                    page.goto(BASE, wait_until="networkidle")
                     page.get_by_label("销售明细", exact=True).set_input_files(str(sales))
                     page.get_by_label("本周周会纪要", exact=True).set_input_files(str(minutes))
-                    page.get_by_role("button", name="开始生成", exact=True).click()
+                    page.get_by_role("button", name="发起任务", exact=True).click()
                     expect(page.get_by_role("alert")).to_contain_text("浏览器验证已阻止写入")
-                    assert len(writes) == 1
+                    assert writes == [(False, True), (True, False), (True, True)], writes
                     sent = page.evaluate("window.uploadInspection")
                     assert sent["sales"]["size"] == sales.stat().st_size
                     assert sent["minutes"]["size"] == minutes.stat().st_size
                     page.unroute(BASE + "/api/runs", intercept_create)
-                    interactions[-1]["two_file_multipart"] = True
+                    interactions.append({"channel": channel, "single_and_two_file_multipart": True})
             assert not blocked_writes, blocked_writes
             context.close()
             # A failed entrypoint script still leaves a recovery link.

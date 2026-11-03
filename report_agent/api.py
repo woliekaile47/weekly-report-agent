@@ -34,12 +34,17 @@ def _sse(event_type, data, seq=None):
 
 
 def public(state):
-    return {k: v for k, v in state.items() if k not in {"bundle"}} | {
+    from report_agent.documents import report_quality_notes
+
+    result = {k: v for k, v in state.items() if k not in {"bundle"}} | {
         "limits": state["bundle"]["employee"]["limits"],
         "config_version": state["bundle"]["version"],
         "model": connection()["LLM_MODEL"],
         "worker_active": state["task_id"] in tasks and not tasks[state["task_id"]].done(),
     }
+    if state.get("metrics") and state.get("draft"):
+        result["report_quality_notes"] = report_quality_notes(state["metrics"], state["draft"])
+    return result
 
 
 async def get_state(task_id):

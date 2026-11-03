@@ -278,6 +278,21 @@ def inspect_report(task_id, artifact, metrics, minutes, draft, bundle, feedback)
     tokens = metrics["tokens"]
     headings = {p.text for p in doc.paragraphs if p.style.name.startswith("Heading")}
     check("结构完整", set(quality["required_sections"]).issubset(headings), "六类业务章节必须齐全")
+    content_errors = []
+    if len(substitute(draft.get("summary", "").strip(), tokens)) < quality.get("min_summary_characters", 30):
+        content_errors.append("本周摘要为空或过短")
+    if not draft.get("actions"):
+        content_errors.append("缺少行动项")
+    for i, action in enumerate(draft.get("actions", []), 1):
+        if len(substitute(action.strip(), tokens)) < quality.get("min_action_characters", 12):
+            content_errors.append(f"第{i}条行动项为空或过短")
+    for item in draft.get("anomalies", []):
+        if len(substitute(item.get("reason", "").strip(), tokens)) < quality.get("min_reason_characters", 8):
+            content_errors.append(f"异常 {item.get('metric_id', '?')} 原因为空或过短")
+    for name in ("conflicts", "data_notes"):
+        if any(not entry.strip() for entry in draft.get(name, [])):
+            content_errors.append(f"{name} 包含空条目")
+    check("章节内容有效", not content_errors, "；".join(content_errors) or "摘要、异常原因和行动项均有内容")
     sentences = [part for part in re.split(r"[。！？!?]+|(?<!\d)\.(?!\d)", draft["summary"]) if part.strip()]
     maximum = quality.get("max_summary_sentences", 5)
     check("摘要句数", len(sentences) <= maximum, f"摘要 {len(sentences)} 句；上限 {maximum} 句")
@@ -300,6 +315,7 @@ def inspect_report(task_id, artifact, metrics, minutes, draft, bundle, feedback)
     unknown = [k for k in re.findall(r"\{\{([^{}]+)\}\}", prose) if k not in tokens]
     check("指标引用", not unknown, "未知占位符：" + str(unknown))
     raw_numbers = []
+    semantic_errors = []
     source_map = {s["id"]: s["text"] for s in minutes["sources"]}
     fragments = [
         (draft["summary"], []),
@@ -327,9 +343,26 @@ def inspect_report(task_id, artifact, metrics, minutes, draft, bundle, feedback)
         clean = re.sub(r"\bg\d+\b", lambda m: "" if m[0] in known_ids else m[0], clean)
         # Source-derived dates/manual estimates must be explicitly attributed; all KPI numbers use tokens.
         source_text = " ".join(source_map.get(sid, "") for sid in cited)
-        nums = re.findall(r"\d+(?:[.,]\d+)*", clean)
         source_nums = set(re.findall(r"\d+(?:[.,]\d+)*", source_text))
-        raw_numbers.extend(n for n in nums if n not in source_nums)
+        kpi_words = r"实收|销售额|环比|毛利率|目标达成率|外卖占比"
+        for match in re.finditer(r"\d+(?:[.,]\d+)*", clean):
+            clause = re.split(r"[。；，,\n]", clean[:match.start()])[-1]
+            if match[0] not in source_nums or re.search(kpi_words, clause):
+                raw_numbers.append(match[0])
+        for match in re.finditer(r"(?P<label>实收|销售额|环比|毛利率|目标达成率|外卖占比)\s*[:：为约]?(?:本周)?\s*\{\{(?P<token>[^{}]+)\}\}", text):
+            expected = {
+                "实收": "amount", "销售额": "amount", "环比": "change", "毛利率": "margin",
+                "目标达成率": "target", "外卖占比": "delivery",
+            }[match["label"]]
+            if not match["token"].endswith("_" + expected):
+                semantic_errors.append(f"{match['label']} 引用了不匹配的指标 {match['token']}")
+        for match in re.finditer(r"(增长|上升|下降|减少|下滑)\s*\{\{([^{}]+_change)\}\}", text):
+            value = str(tokens.get(match[2], ""))
+            if (value.startswith("-") and match[1] in {"增长", "上升"}) or (
+                value.startswith("+") and match[1] in {"下降", "减少", "下滑"}
+            ):
+                semantic_errors.append(f"{match[2]} 的方向与“{match[1]}”不一致")
+    check("指标语义一致", not semantic_errors, "；".join(semantic_errors) or "指标名称与占位符类型一致")
     check("正文数字依据", not raw_numbers, "无指标占位符或所引原文依据的数字：" + str(raw_numbers))
     required = {g["id"] for g in metrics["anomalies"]}
     got = [g["metric_id"] for g in draft["anomalies"]]

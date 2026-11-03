@@ -33,8 +33,11 @@ class Source(BaseModel):
 
 
 class MinutesResult(BaseModel):
-    year: int | None = None
-    week: int | None
+    year: int
+    week: int
+    period_start: str
+    period_end: str
+    period_lines: list[int] = Field(min_length=1)
     sources: list[Source]
 
 

@@ -1,18 +1,29 @@
 """Business regressions reported in the 2026-11-02 user acceptance run."""
 
 import asyncio
-from datetime import date, timedelta
+import zipfile
+from datetime import date, datetime, timedelta
 from io import BytesIO
 
 import pandas as pd
 import pytest
+from docx import Document
 from fastapi.testclient import TestClient
+from openpyxl.utils.datetime import CALENDAR_WINDOWS_1900, to_excel
 
 from report_agent.api import app, service, tasks
 from report_agent.config import snapshot
-from report_agent.data_tools import compute_metrics, read_minutes, read_sales
-from report_agent.models import WorkflowError
+from report_agent.data_tools import (
+    compute_metrics,
+    inspect_office_archive,
+    parse_sales_day,
+    read_minutes,
+    read_sales,
+)
+from report_agent.documents import inspect_report, sha256
+from report_agent.models import Draft, WorkflowError
 from report_agent.service import Service
+from report_agent.store import task_path
 
 
 def workbook(*, missing_store=False, duplicate_names=False, negative_target=False,
@@ -172,6 +183,106 @@ def test_markdown_period_declaration_is_checked_before_analysis(text):
     task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.md", text.encode())})
     result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
     assert (result["year"], result["week"]) == (2026, 43)
+
+
+@pytest.mark.parametrize("text", [
+    "周会纪要\n讨论本周经营情况。",
+    "周会纪要\n报告周期：2026-10-19 至 2026-10-25",
+    "2026年第44周周会纪要\n统计周期：2026-10-19 至 2026-10-25",
+    "第44周周会纪要",
+])
+def test_minutes_without_confirmed_matching_period_are_rejected(text):
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.md", text.encode())})
+    if "统计周期" in text:
+        pattern = "冲突"
+    elif "报告周期" in text:
+        result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+        assert (result["year"], result["week"], result["period_start"]) == (2026, 43, "2026-10-19")
+        return
+    else:
+        pattern = "缺少|只有"
+    with pytest.raises(WorkflowError, match=pattern):
+        read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+
+
+@pytest.mark.parametrize("period", [
+    "2026-10-26 至 2026-11-01",
+    "2026 年 10 月 26 日—11 月 1 日",
+])
+def test_valid_date_range_normalizes_to_iso_week(period):
+    text = "经营纪要\n统计周期：" + period
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.txt", text.encode())})
+    result = read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+    assert (result["year"], result["week"]) == (2026, 44)
+    assert result["period_lines"] == [2]
+
+
+def test_word_table_period_is_read_in_document_order_and_conflicts_with_title():
+    doc = Document()
+    doc.add_paragraph("2026年第44周周会纪要")
+    table = doc.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "统计周期"
+    table.cell(0, 1).text = "2026W43"
+    doc.add_paragraph("会议说明仅供经营分析使用。")
+    output = BytesIO()
+    doc.save(output)
+    task_id = service.create({"year": 2026, "week": 44}, {"minutes": ("minutes.docx", output.getvalue())})
+    with pytest.raises(WorkflowError, match="冲突"):
+        read_minutes(task_id, service.store.get(task_id)["inputs"]["minutes"])
+
+
+def test_ambiguous_sales_dates_are_rejected_and_timezone_is_converted():
+    with pytest.raises(WorkflowError, match="有歧义"):
+        parse_sales_day("10/11/2026")
+    assert parse_sales_day("2026年10月26日") == date(2026, 10, 26)
+    assert parse_sales_day("2026-10-25T17:00:00Z") == date(2026, 10, 26)
+    assert parse_sales_day(str(to_excel(datetime(2026, 10, 26), CALENDAR_WINDOWS_1900)),
+                           CALENDAR_WINDOWS_1900) == date(2026, 10, 26)
+
+
+def test_compressed_office_file_is_bounded_before_parsing(tmp_path):
+    path = tmp_path / "huge.xlsx"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", "x" * 101)
+    with pytest.raises(WorkflowError, match="资源上限"):
+        inspect_office_archive(path, max_uncompressed=100)
+
+
+@pytest.mark.parametrize("change", [
+    {"summary": "  "}, {"actions": [""]}, {"actions": []},
+    {"anomalies": [{"metric_id": "g1", "reason": " ", "uncertain": True}]},
+])
+def test_draft_rejects_empty_required_content(change):
+    baseline = {"summary": "本周业务摘要有具体指标。", "anomalies": [], "actions": ["运营负责人核查销售明细。"]}
+    with pytest.raises(ValueError):
+        Draft.model_validate({**baseline, **change})
+
+
+def test_word_quality_rejects_wrong_kpi_token_cited_kpi_number_and_empty_sections():
+    task_id = service.create({"year": 2026, "week": 44})
+    path = task_path(task_id, "artifacts/qa.docx")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Document().save(path)
+    artifact = {"file": "artifacts/qa.docx", "artifact_id": "qa", "sha256": sha256(path)}
+    metrics = {
+        "tokens": {"total_amount": "100", "total_margin": "60.0%", "total_change": "-10.0%"},
+        "total": {"label": "全公司", "cents": 10000, "change": 0.0, "margin": 60.0, "target_rate": 100.0},
+        "groups": [], "anomalies": [],
+    }
+    minutes = {"sources": [{"id": "M001", "text": "会议于10月20日召开"}]}
+    baseline = {
+        "summary": "本周实收 {{total_amount}} 元，具体金额已由销售明细核对，管理层按实际数据安排复核。",
+        "anomalies": [], "actions": ["运营负责人对照销售明细核查经营变化并反馈。"],
+    }
+
+    def failed_check(draft, name):
+        report = inspect_report(task_id, artifact, metrics, minutes, draft, snapshot(), [])
+        return next(check for check in report["checks"] if check["name"] == name)["passed"] is False
+
+    assert failed_check({**baseline, "summary": "本周实收 {{total_margin}} 元，具体金额已由销售明细核对，管理层按实际数据安排复核。"}, "指标语义一致")
+    assert failed_check({**baseline, "summary": "本周环比增长 {{total_change}}，管理层按实际数据安排复核。"}, "指标语义一致")
+    assert failed_check({**baseline, "summary": "本周实收20元[M001]，管理层按实际数据安排复核。"}, "正文数字依据")
+    assert failed_check({**baseline, "summary": "", "actions": [""], "data_notes": ["已有足够多的文字来填充正文。" * 30]}, "章节内容有效")
 
 
 def test_complete_excel_replacement_retires_old_master_before_ingest():

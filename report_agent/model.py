@@ -20,11 +20,6 @@ async def generate(state, store):
     )
     if used >= limits["model_calls"]:
         raise WorkflowError("本轮模型调用已达到上限，已暂停转人工处理", "budget")
-    store.event(
-        state["task_id"],
-        "model_started",
-        {"budget_id": budget, "model": settings["LLM_MODEL"], "attempt": used + 1},
-    )
     system = (
         state["bundle"]["skill"]
         + "\n必须只输出符合以下Schema的JSON：\n"
@@ -45,8 +40,15 @@ async def generate(state, store):
             if item["status"] == "open"
         ],
         "requirements": state["bundle"]["employee"]["quality"],
-        "metric_placeholders": {"{{" + k + "}}": v for k, v in metrics["tokens"].items()},
     }
+    user_content = json.dumps(payload, ensure_ascii=False)
+    if len(system) + len(user_content) > limits.get("model_input_characters", 160000):
+        raise WorkflowError("模型输入超过配置的字符预算，请缩短纪要或处理未解决反馈后恢复", "budget")
+    store.event(
+        state["task_id"],
+        "model_started",
+        {"budget_id": budget, "model": settings["LLM_MODEL"], "attempt": used + 1},
+    )
     try:
         async with httpx.AsyncClient(timeout=limits["model_timeout_seconds"]) as client:
             response = await client.post(
@@ -64,7 +66,7 @@ async def generate(state, store):
                     "max_tokens": int(settings["LLM_MAX_TOKENS"]),
                     "messages": [
                         {"role": "system", "content": system},
-                        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                        {"role": "user", "content": user_content},
                     ],
                 },
             )
@@ -74,13 +76,20 @@ async def generate(state, store):
             )
         if response.status_code >= 400:
             raise WorkflowError(f"模型服务 HTTP {response.status_code}，请检查设置或额度", "model")
-        choice = response.json()["choices"][0]
+        response_data = response.json()
+        choice = response_data["choices"][0]
         if choice.get("finish_reason") == "length":
             raise WorkflowError("模型输出被截断，请调整最大输出长度或推理强度后恢复", "configuration")
         content = choice["message"]["content"].strip()
         content = re.sub(r"^```(?:json)?\s*|\s*```$", "", content)
         result = ground_dates(Draft.model_validate_json(content).model_dump(), state)
-        store.event(state["task_id"], "model_completed", {"budget_id": budget, "attempt": used + 1})
+        usage = response_data.get("usage") or {}
+        store.event(state["task_id"], "model_completed", {
+            "budget_id": budget, "attempt": used + 1,
+            "input_characters": len(user_content),
+            "prompt_tokens": usage.get("prompt_tokens"),
+            "completion_tokens": usage.get("completion_tokens"),
+        })
         return result
     except WorkflowError:
         raise

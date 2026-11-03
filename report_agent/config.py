@@ -22,7 +22,7 @@ def validate_files(files):
     if not isinstance(employee, dict) or not isinstance(columns, dict):
         raise ValueError("员工配置和字段映射必须是非空对象")
     limit_names = {
-        "model_calls", "model_timeout_seconds", "active_seconds", "tool_timeout_seconds",
+        "model_calls", "model_input_characters", "model_timeout_seconds", "active_seconds", "tool_timeout_seconds",
         "tool_retries", "quality_repairs",
     }
     limits = employee.get("limits")
@@ -57,6 +57,9 @@ def validate_files(files):
         raise ValueError("质检规则 required_sections 不能为空")
     if type(quality.get("max_summary_sentences")) is not int or quality["max_summary_sentences"] < 1:
         raise ValueError("质检规则 max_summary_sentences 必须是正整数")
+    for name in ("min_summary_characters", "min_reason_characters", "min_action_characters"):
+        if type(quality.get(name)) is not int or quality[name] < 1:
+            raise ValueError(f"质检规则 {name} 必须是正整数")
     business = employee.get("business")
     if not isinstance(business, dict):
         raise ValueError("缺少业务规则")

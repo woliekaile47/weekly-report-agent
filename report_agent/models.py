@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TaskSpec(BaseModel):
@@ -17,15 +17,31 @@ class TaskSpec(BaseModel):
 
 
 class Evidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     source_id: str
     quote: str = Field(min_length=1)
 
+    @field_validator("source_id", "quote")
+    @classmethod
+    def nonblank(cls, value):
+        if not value.strip():
+            raise ValueError("证据编号和摘录不能为空")
+        return value
+
 
 class Anomaly(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     metric_id: str
     reason: str
     uncertain: bool
     evidence: list[Evidence] = Field(default_factory=list)
+
+    @field_validator("metric_id", "reason")
+    @classmethod
+    def nonblank(cls, value):
+        if not value.strip():
+            raise ValueError("异常编号和原因不能为空")
+        return value
 
 
 Section = Literal["summary", "anomalies", "conflicts", "data_notes", "actions"]
@@ -39,6 +55,7 @@ class RevisionResponse(BaseModel):
 
 
 class Draft(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     summary: str
     anomalies: list[Anomaly]
     conflicts: list[str] = Field(default_factory=list)
@@ -46,6 +63,26 @@ class Draft(BaseModel):
     actions: list[str]
     review_response: str = ""
     revision_responses: list[RevisionResponse] = Field(default_factory=list)
+
+    @field_validator("summary")
+    @classmethod
+    def summary_required(cls, value):
+        if not value.strip():
+            raise ValueError("本周摘要不能为空")
+        return value
+
+    @field_validator("actions", "conflicts", "data_notes")
+    @classmethod
+    def list_entries_required(cls, values):
+        if any(not item.strip() for item in values):
+            raise ValueError("章节条目不能为空")
+        return values
+
+    @model_validator(mode="after")
+    def actions_required(self):
+        if not self.actions:
+            raise ValueError("至少填写一条行动项")
+        return self
 
 
 class ReviewItem(BaseModel):

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import re
 import unicodedata
+import zipfile
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from docx import Document
@@ -29,6 +31,49 @@ def amount(value):
         return int((v * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
     except (InvalidOperation, ValueError) as exc:
         raise WorkflowError("金额为空、非数字或超出合理范围，请核实原始数据", "materials") from exc
+
+
+def parse_sales_day(value, excel_epoch=None):
+    text = str(value).strip()
+    if excel_epoch is not None and re.fullmatch(r"\d+(?:\.0+)?", text):
+        from openpyxl.utils.datetime import from_excel
+
+        try:
+            result = from_excel(float(text), epoch=excel_epoch)
+            if isinstance(result, datetime):
+                return result.date()
+        except (ValueError, OverflowError):
+            pass
+    match = re.fullmatch(r"(\d{4})[-/年](\d{1,2})[-/月](\d{1,2})日?", text)
+    if match:
+        try:
+            return date(*map(int, match.groups()))
+        except ValueError:
+            pass
+    try:
+        result = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if result.tzinfo is not None:
+            return result.astimezone(ZoneInfo("Asia/Shanghai")).date()
+        if re.match(r"^\d{4}-\d{2}-\d{2}[T ]", text):
+            return result.date()
+    except ValueError:
+        pass
+    raise WorkflowError(f"销售日期“{text}”无效或有歧义；请使用 YYYY-MM-DD、中文年月日或明确时区", "materials")
+
+
+def inspect_office_archive(path, max_uncompressed=256 * 1024 * 1024):
+    """Reject compressed Office files that can exhaust the parser before row limits apply."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            if len(entries) > 500 or sum(entry.file_size for entry in entries) > max_uncompressed or any(
+                entry.file_size > 128 * 1024 * 1024
+                or entry.file_size > max(1, entry.compress_size) * 1000
+                for entry in entries
+            ):
+                raise WorkflowError("Office 文件展开后超过解析资源上限，请减少工作表或文件内容", "materials")
+    except (zipfile.BadZipFile, OSError) as exc:
+        raise WorkflowError("Office 文件压缩结构无效，请检查文件是否损坏", "materials") from exc
 
 
 def mapped(raw, aliases, overrides=None):
@@ -78,14 +123,29 @@ def workbook_has_catalogs(path, columns):
 def read_sales(task_id, file, columns, options=None, master_file=""):
     path = task_path(task_id, file)
     options = options or {}
+    excel_epoch = None
     try:
         if path.suffix == ".xlsx":
+            from openpyxl import load_workbook
+
+            inspect_office_archive(path)
+            workbook = load_workbook(path, read_only=True)
+            excel_epoch = workbook.epoch
+            if any((sheet.max_row or 0) > 110_000 or (sheet.max_column or 0) > 200
+                   for sheet in workbook.worksheets) or sum(
+                (sheet.max_row or 0) * (sheet.max_column or 0) for sheet in workbook.worksheets
+            ) > 4_000_000:
+                workbook.close()
+                raise WorkflowError("Excel 工作表行列规模超过解析上限", "materials")
+            workbook.close()
             sheets = pd.read_excel(path, sheet_name=None, header=None, dtype=str, keep_default_na=False)
         elif path.suffix == ".csv":
             try:
-                frame = pd.read_csv(path, header=None, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+                frame = pd.read_csv(path, header=None, dtype=str, keep_default_na=False,
+                                    encoding="utf-8-sig", nrows=100_017)
             except UnicodeDecodeError:
-                frame = pd.read_csv(path, header=None, dtype=str, keep_default_na=False, encoding="gb18030")
+                frame = pd.read_csv(path, header=None, dtype=str, keep_default_na=False,
+                                    encoding="gb18030", nrows=100_017)
             sheets = {"CSV": frame}
         else:
             raise WorkflowError("销售资料只支持 XLSX、CSV", "materials")
@@ -193,9 +253,10 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
     records = []
     for index, row in frame.iterrows():
         try:
-            day = pd.Timestamp(row["date"])
-            if pd.isna(day):
-                raise ValueError()
+            try:
+                day = parse_sales_day(row["date"], excel_epoch)
+            except WorkflowError as exc:
+                raise WorkflowError(f"“{sheet}”第 {int(index) + 1} 行{exc}", "materials") from exc
             store = stores[str(row["store_id"]).strip()]
             product = products[str(row["product_id"]).strip()]
             q = Decimal(str(row["quantity"]))
@@ -213,7 +274,7 @@ def read_sales(task_id, file, columns, options=None, master_file=""):
             records.append(
                 {
                     "id": str(row["record_id"]),
-                    "date": day.date().isoformat(),
+                    "date": day.isoformat(),
                     "store_id": store["store_id"],
                     "store": store["store"],
                     "region": store["region"],
@@ -261,31 +322,57 @@ def read_minutes(task_id, file):
     path = task_path(task_id, file)
     try:
         if path.suffix == ".docx":
+            inspect_office_archive(path)
             doc = Document(path)
-            lines = [p.text for p in doc.paragraphs] + [
-                " | ".join(c.text for c in row.cells) for t in doc.tables for row in t.rows
-            ]
+            from docx.oxml.ns import qn
+            from docx.table import Table
+            from docx.text.paragraph import Paragraph
+
+            lines = []
+            for element in doc.element.body.iterchildren():
+                if element.tag == qn("w:p"):
+                    lines.append(Paragraph(element, doc).text)
+                elif element.tag == qn("w:tbl"):
+                    lines.extend(" | ".join(c.text for c in row.cells) for row in Table(element, doc).rows)
         else:
             lines = path.read_text(encoding="utf-8-sig").splitlines()
         lines = [_normalize(line) for line in lines if line.strip()]
+    except WorkflowError:
+        raise
     except Exception as exc:
         raise WorkflowError("周会纪要无法读取，请提供有效 Word 或 UTF-8 文本", "materials") from exc
     if not lines or sum(map(len, lines)) > 60000:
         raise WorkflowError("纪要为空或超过六万字", "materials")
-    # Only title-area period declarations are metadata; ordinary dates in the body are not.
+    # Only the title and explicit period fields are metadata; incidental body dates are not.
     periods = []
     for index, line in enumerate(lines):
         # Markdown styling is presentation, while table cells and bold labels can hold period metadata.
         declaration = re.sub(r"^\s*(?:#{1,6}\s*|[-*+]\s+|\d+[.)]\s+)", "", line)
         declaration = declaration.strip().strip("|｜ ")
         declaration = re.sub(r"[*_`]", "", declaration).strip()
-        declared = index == 0 or re.match(
+        explicit = re.match(
             r"^\s*(?:统计周期|报告周期|会议周期|周报周期|周期|报告周次)\s*[:：|｜]", declaration
-        ) or (index < 8 and re.match(
+        )
+        declared = index == 0 or explicit or (index < 8 and re.match(
             r"^\s*(?:\d{4}\s*年?\s*[-－]?\s*[Ww]\d{1,2}|\d{4}\s*年\s*第\s*\d{1,2}\s*周)", declaration
         ))
         if not declared:
             continue
+        dates = re.search(
+            r"(?<!\d)(\d{4})\s*[年/-]\s*(\d{1,2})\s*[月/-]\s*(\d{1,2})\s*日?\s*"
+            r"(?:至|到|~|～|—|–|－)\s*"
+            r"(?:(\d{4})\s*[年/-]\s*)?(\d{1,2})\s*[月/-]\s*(\d{1,2})\s*日?(?!\d)",
+            declaration,
+        )
+        if dates:
+            try:
+                begin = date(int(dates[1]), int(dates[2]), int(dates[3]))
+                finish = date(int(dates[4] or dates[1]), int(dates[5]), int(dates[6]))
+                if begin.isoweekday() != 1 or finish != begin + timedelta(days=6):
+                    raise ValueError("统计周期须为周一至周日的完整 ISO 周")
+            except ValueError as exc:
+                raise WorkflowError(f"纪要第 {index + 1} 行日期范围无效：{exc}", "materials") from exc
+            periods.append((index + 1, begin.isocalendar().year, begin.isocalendar().week))
         week_match = re.search(
             r"第\s*(\d{1,2})\s*周|(?<!\d)\d{4}\s*[-－]?\s*[Ww]\s*(\d{1,2})(?!\d)", declaration
         )
@@ -294,8 +381,18 @@ def read_minutes(task_id, file):
         )
         year = int(year_match[1] or year_match[2]) if year_match else None
         week = int(week_match[1] or week_match[2]) if week_match else None
-        if year is not None or week is not None:
+        if week is not None and year is None:
+            raise WorkflowError(f"纪要第 {index + 1} 行只有周次，缺少年份", "materials")
+        if year is not None and week is not None:
+            try:
+                date.fromisocalendar(year, week, 1)
+            except ValueError as exc:
+                raise WorkflowError(f"纪要第 {index + 1} 行 ISO 年周无效", "materials") from exc
             periods.append((index + 1, year, week))
+        elif explicit and not dates:
+            raise WorkflowError(f"纪要第 {index + 1} 行统计周期无法识别，请写明 ISO 年周或完整日期范围", "materials")
+    if not periods:
+        raise WorkflowError("纪要缺少可确认的统计周期，请在标题或统计周期字段写明 ISO 年周", "materials")
     years = {year for _, year, _ in periods if year is not None}
     weeks = {week for _, _, week in periods if week is not None}
     if len(years) > 1 or len(weeks) > 1:
@@ -304,9 +401,14 @@ def read_minutes(task_id, file):
             + "；".join(f"第{line}行 {year or '?'}年 第{week or '?'}周" for line, year, week in periods),
             "materials",
         )
+    year, week = next(iter(years)), next(iter(weeks))
+    start = date.fromisocalendar(year, week, 1)
     return {
-        "week": next(iter(weeks), None),
-        "year": next(iter(years), None),
+        "week": week,
+        "year": year,
+        "period_start": start.isoformat(),
+        "period_end": (start + timedelta(days=6)).isoformat(),
+        "period_lines": sorted({line for line, _, _ in periods}),
         "sources": [{"id": f"M{i:03}", "text": line} for i, line in enumerate(lines, 1)],
     }
 

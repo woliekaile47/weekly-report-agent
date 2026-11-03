@@ -161,6 +161,27 @@ def test_model_request_cap_blocks_the_next_request(monkeypatch):
         asyncio.run(generate(s, BudgetStore()))
 
 
+def test_model_input_budget_pauses_before_counting_or_sending_request(monkeypatch):
+    from report_agent.model import generate
+    from report_agent.models import WorkflowError
+
+    monkeypatch.setattr("report_agent.model.connection", lambda: {"LLM_API_KEY": "test-key"})
+    state = sample_state()
+    state["budget_id"] = "input-limited"
+    state["bundle"]["employee"]["limits"]["model_input_characters"] = 10
+
+    class BudgetStore:
+        def events(self, task_id):
+            return []
+
+        def event(self, *args):
+            raise AssertionError("超出输入预算时不能计入实际模型调用")
+
+    with pytest.raises(WorkflowError, match="字符预算") as exc:
+        asyncio.run(generate(state, BudgetStore()))
+    assert exc.value.kind == "budget"
+
+
 def test_structured_review_validation():
     decision = Review(decision="revise", reviewer="运营", version=1, items=[{"text": "摘要简洁些"}])
     assert decision.items[0].category == "auto"

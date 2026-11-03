@@ -3,6 +3,7 @@ skill: skills/weekly-report/SKILL.md
 allowed_tools: [read_sales, read_minutes, compute_metrics, generate_report, inspect_report]
 limits:
   model_calls: 8
+  model_input_characters: 160000
   model_timeout_seconds: 90
   active_seconds: 600
   tool_timeout_seconds: 90
@@ -10,6 +11,7 @@ limits:
   quality_repairs: 2
 limit_reasons:
   model_calls: 为初稿、有限质检修正及故障重试共用请求额度；每个实际请求含失败均计数，超限暂停转人工。
+  model_input_characters: 限制发送给模型的系统指令与业务内容总字符量；超限暂停补充或整理材料，不把字符数误称为精确 token 数。
   model_timeout_seconds: 为模型结构化分析预留完成时间；超时暂停转人工，避免无限等待。
   active_seconds: 覆盖数据处理与有限模型修正；超过上限保存进度并要求人工处理，等待人工不计时。
 quality:
@@ -21,6 +23,9 @@ quality:
   forbidden_words: [保证盈利, 内部绝密]
   max_actions: 5
   max_summary_sentences: 5
+  min_summary_characters: 30
+  min_reason_characters: 8
+  min_action_characters: 12
 business:
   flat_phrases: [基本持平, 整体持平]
   flat_tolerance_percent: 3
@@ -54,7 +59,9 @@ rework:
     结构完整: {category: layout, sections: []}
     正文长度: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
     摘要句数: {category: content, sections: [summary]}
+    章节内容有效: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
     指标引用: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
+    指标语义一致: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
     正文数字依据: {category: content, sections: [summary, anomalies, conflicts, data_notes, actions]}
     异常逐项覆盖: {category: evidence, sections: [anomalies]}
     证据原文可追溯: {category: evidence, sections: [anomalies, conflicts, data_notes, actions]}

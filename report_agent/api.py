@@ -50,6 +50,9 @@ def public(state):
         "model": connection()["LLM_MODEL"],
         "worker_active": state["task_id"] in tasks and not tasks[state["task_id"]].done(),
     }
+    audit = service.store.events(state["task_id"])
+    result["total_model_calls"] = sum(e["kind"] == "model_started" for e in audit)
+    result["total_active_seconds"] = sum(e["payload"].get("duration_seconds", 0) for e in audit if e["kind"] == "node_completed")
     if state.get("metrics") and state.get("draft"):
         result["report_quality_notes"] = report_quality_notes(state["metrics"], state["draft"])
     return result

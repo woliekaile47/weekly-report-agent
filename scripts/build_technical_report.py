@@ -10,6 +10,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.graphics.shapes import Drawing, Rect, String, Line
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +84,18 @@ def blocks(text):
     return out
 
 
+def architecture_diagram():
+    diagram = Drawing(480, 140)
+    nodes = [(10,90,"React 工作台"),(170,90,"FastAPI 与 SQLite"),(330,90,"LangGraph 编排"),
+             (330,20,"MCP 工具与模型"),(170,20,"Word 与 PDF"),(10,20,"审核与交付")]
+    for x,y,label in nodes:
+        diagram.add(Rect(x,y,140,36,fillColor=colors.HexColor("#edf2fa"),strokeColor=colors.HexColor("#657c9e"),rx=4))
+        diagram.add(String(x+70,y+13,label,fontName="STSong-Light",fontSize=11,textAnchor="middle"))
+    for x1,y1,x2,y2 in [(150,108,170,108),(310,108,330,108),(400,90,400,56),(330,38,310,38),(170,38,150,38)]:
+        diagram.add(Line(x1,y1,x2,y2,strokeColor=colors.HexColor("#657c9e")))
+    return diagram
+
+
 def main():
     text = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
     sections = {}
@@ -102,13 +115,14 @@ def main():
         if i:
             story.append(PageBreak())
         story.append(p("经营周报员工技术报告" if i == 0 else label, title if i == 0 else heading))
-        story.append(p(f"场景 A  |  LangGraph / MCP / Agent Skills  |  2026-10-31  |  {i + 1}/6", small))
+        story.append(p(f"场景 A  |  LangGraph / MCP / Agent Skills  |  2026-11-06  |  {i + 1}/6", small))
         for name in names:
             story.extend(blocks("## " + name + "\n" + sections[name]))
         if i == 0:
             story.extend(
                 [
-                    Spacer(1, 20),
+                    Spacer(1, 10),
+                    architecture_diagram(),
                     p("工作流", heading),
                     p(
                         "识别材料 → 计算指标 → 核对纪要 → 模型分析 → Word生成 → 程序质检 → 人工审核 → 正式交付"
@@ -121,9 +135,9 @@ def main():
         if i == 4:
             verification = ROOT / "docs/verification.md"
             if verification.exists():
-                paragraphs = verification.read_text(encoding="utf-8").split("\n\n")
+                paragraphs = [item.strip() for item in verification.read_text(encoding="utf-8").split("\n\n")]
                 story.append(p("验证摘要", heading))
-                for prefix in ("工程验证：", "真实模型：", "界面验证（本轮）："):
+                for prefix in ("本轮工程验证：", "本轮真实模型：", "本轮界面验证："):
                     paragraph = next((item for item in paragraphs if item.startswith(prefix)), "")
                     if paragraph:
                         story.append(p(paragraph, evidence))

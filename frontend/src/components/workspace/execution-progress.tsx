@@ -144,9 +144,10 @@ export function ExecutionProgress({ state: s }: { state: StateSnapshot }) {
         </details>
       )}
       <p className="text-xs leading-6 text-muted-foreground">
-        {s.model ?? "读取模型配置"} · 模型调用 {s.model_calls ?? 0}/
-        {s.limits?.model_calls ?? "—"} 次 · 活动耗时{" "}
+        {s.model ?? "读取模型配置"} · 本轮调用 {s.model_calls ?? 0}/
+        {s.limits?.model_calls ?? "—"} 次 · 本轮活动耗时{" "}
         {Math.round(s.active_seconds ?? 0)}/{s.limits?.active_seconds ?? "—"} 秒
+        · 累计调用 {s.total_model_calls ?? 0} 次 · 累计耗时 {Math.round(s.total_active_seconds ?? 0)} 秒
       </p>
     </div>
   );

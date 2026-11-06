@@ -1,6 +1,7 @@
 """Public deployment access boundary; disabled for the local desktop workflow."""
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import os
@@ -16,6 +17,7 @@ from report_agent.config import DATA
 
 ENABLED = os.getenv("REPORT_PUBLIC") == "1"
 KEY = os.getenv("REPORT_SESSION_SECRET", "")
+PASSWORD = os.getenv("REPORT_ADMIN_PASSWORD", "")
 COOKIE = "report_session"
 
 
@@ -79,8 +81,8 @@ def consume(buckets):
 def install(app):
     if not ENABLED:
         return
-    if len(KEY) < 32:
-        raise RuntimeError("Public deployment requires a session secret")
+    if len(KEY) < 32 or len(PASSWORD) < 16:
+        raise RuntimeError("Public deployment requires a session secret (32+ characters) and admin password (16+ characters)")
 
     mutation_lock = asyncio.Lock()
 
@@ -97,7 +99,7 @@ def install(app):
         fresh = who is None
         who = who or secrets.token_hex(24)
         request.state.owner = who
-        admin = False
+        admin = who == "admin"
 
         def error(code, message):
             return JSONResponse({"detail": message}, status_code=code)
@@ -108,15 +110,25 @@ def install(app):
                 "sec-fetch-site"
             ) == "cross-site":
                 return error(403, "不允许跨站操作")
-        ip = request.client.host
         if path == "/admin":
-            return RedirectResponse("/")
+            try:
+                scheme, encoded = request.headers.get("authorization", "").split(" ", 1)
+                user, password = base64.b64decode(encoded, validate=True).decode().split(":", 1)
+                valid = scheme.lower() == "basic" and user == "admin" and secrets.compare_digest(password.encode(), PASSWORD.encode())
+            except (ValueError, UnicodeError):
+                valid = False
+            if not valid:
+                return JSONResponse({"detail": "需要管理员登录"}, status_code=401, headers={"WWW-Authenticate": 'Basic realm="Report admin"'})
+            response = RedirectResponse("/")
+            response.set_cookie(COOKIE, sign("admin"), httponly=True, secure=True, samesite="strict", max_age=28800)
+            return response
         if path in {"/docs", "/redoc", "/openapi.json"} and not admin:
             return error(404, "页面不存在")
         if path == "/api/session":
-            # Legacy UI flag grants configuration controls, not access to other sessions' tasks.
-            response = JSONResponse({"admin": True, "public": True})
+            response = JSONResponse({"admin": admin, "public": True})
         else:
+            if path.startswith(("/api/config", "/api/connection", "/api/limits")) and not admin:
+                return error(403, "仅管理员可修改全局配置")
             if path.startswith("/api/runs/"):
                 parts = path.split("/")
                 task = parts[3]
@@ -127,12 +139,6 @@ def install(app):
 
                 if sum(not t.done() for t in tasks.values()) >= 1:
                     return error(429, "服务器正在处理一份周报，请稍后重试")
-                if not admin:
-                    buckets = [("ops:" + ip, 12), ("global-ops", 60)]
-                    if path == "/api/runs":
-                        buckets += [("new:" + ip, 3), ("global-new", 20)]
-                    if not consume(buckets):
-                        return error(429, "今日体验额度已用完，请明天再试")
             response = await call_next(request)
         if fresh:
             response.set_cookie(

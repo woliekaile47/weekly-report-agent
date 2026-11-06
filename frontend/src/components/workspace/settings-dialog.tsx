@@ -89,7 +89,7 @@ export function SettingsDialog({
           </nav>
           <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border">
             <div className="space-y-8 p-4 md:p-6">
-              {!access.admin ? (<p>可免登录上传、生成、审核和下载自己的周报。模型与业务配置由服务器维护。</p>) : section !== "about" ? (
+              {!access.admin ? (<p>可免登录上传、生成、审核和下载自己的周报。模型与业务配置由管理员维护。<a href="/admin" className="underline">管理员登录</a></p>) : section !== "about" ? (
                 <Configuration
                   key={section}
                   page={section === "models" ? "settings" : section}

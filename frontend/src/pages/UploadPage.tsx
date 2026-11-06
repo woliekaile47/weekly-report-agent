@@ -209,7 +209,7 @@ export function UploadPage() {
               </p>
             )}
             <p className="text-center text-[11px] leading-6 text-muted-foreground/70">
-              任务保留在当前浏览器中，清除浏览器数据后无法找回。通过程序质检后，由你审核并确认交付。公开体验每个 IP 每天可新建 3 份周报，请勿上传无权分享的材料。
+              任务保留在当前浏览器中，清除浏览器数据后无法找回。通过程序质检后，由你审核并确认交付。不限制每日任务数量，请勿上传无权分享的材料。
             </p>
           </form>
         </div>

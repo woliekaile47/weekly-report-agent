@@ -66,6 +66,8 @@ export interface StateSnapshot {
   error_kind?: string;
   worker_active?: boolean;
   model?: string;
+  total_model_calls?: number;
+  total_active_seconds?: number;
   model_calls?: number;
   active_seconds?: number;
   limits?: Record<string, number>;

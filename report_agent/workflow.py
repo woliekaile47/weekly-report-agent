@@ -109,7 +109,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
             store.event(
                 state["task_id"],
                 "node_completed",
-                {"node": name, "status": update.get("status", state["status"]), "version": state["version"]},
+                {"node": name, "status": update.get("status", state["status"]), "version": state["version"], "duration_seconds": startup + time.monotonic() - started},
             )
             return update
 

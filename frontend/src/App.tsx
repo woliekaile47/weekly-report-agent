@@ -1,3 +1,4 @@
+import { AccessContext } from "@/lib/access";
 // Workspace shell adapted from DeerFlow e0f5483 (MIT).
 import { useEffect, useMemo, useState } from "react";
 import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
@@ -14,6 +15,9 @@ import { RunDetailPage } from "@/pages/RunDetailPage";
 import { UploadPage } from "@/pages/UploadPage";
 
 export default function App() {
+  const [access, setAccess] = useState<{admin: boolean; public: boolean} | null>(null);
+  const [accessError, setAccessError] = useState(false);
+  useEffect(() => { fetch("/api/session", {signal: AbortSignal.timeout(15000)}).then(r => r.ok ? r.json() : Promise.reject()).then(setAccess).catch(() => setAccessError(true)); }, []);
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -38,7 +42,10 @@ export default function App() {
       setSettingsOpen(true);
     }
   }, [pathname]);
+  if (accessError) return <main className="grid min-h-svh place-content-center gap-4 p-6"><p role="alert">暂时无法连接工作空间，请检查网络后重试。</p><button className="secondary" onClick={() => window.location.reload()}>重新连接</button></main>;
+  if (!access) return <div className="p-8">正在连接工作空间…</div>;
   return (
+    <AccessContext.Provider value={access}>
     <SettingsContext.Provider value={settings}>
       <SidebarProvider
         defaultOpen={
@@ -95,5 +102,6 @@ export default function App() {
         />
       </SidebarProvider>
     </SettingsContext.Provider>
+    </AccessContext.Provider>
   );
 }

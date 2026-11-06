@@ -17,10 +17,10 @@ export function isoWeekStart(year: number, week: number): Date | null {
   return thursday.getUTCFullYear() === year ? start : null;
 }
 
-export function lastCompleteIsoWeek(now = new Date()) {
+export function currentIsoWeek(now = new Date()) {
   // Use the browser's local calendar date, then UTC arithmetic to avoid DST shifts.
   const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const start = new Date(mondayOf(today).getTime() - WEEK);
+  const start = mondayOf(today);
   const year = new Date(start.getTime() + 3 * DAY).getUTCFullYear();
   const first = isoWeekStart(year, 1)!;
   return { year, week: Math.round((start.getTime() - first.getTime()) / WEEK) + 1 };
@@ -32,4 +32,10 @@ export function describeIsoWeek(year: number, week: number) {
   const end = new Date(start.getTime() + 6 * DAY);
   const shortDate = (date: Date) => `${date.getUTCMonth() + 1} 月 ${date.getUTCDate()} 日`;
   return `统计周期：${year} 年第 ${week} 周（${shortDate(start)}—${shortDate(end)}）`;
+}
+
+export function lastCompleteIsoWeek(now = new Date()) {
+ const previous = new Date(now);
+ previous.setDate(previous.getDate() - 7);
+ return currentIsoWeek(previous);
 }

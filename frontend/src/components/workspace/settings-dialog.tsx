@@ -1,3 +1,4 @@
+import { useAccess } from "@/lib/access";
 // Adapted from DeerFlow settings/settings-dialog.tsx, e0f5483 (MIT).
 import {
   BotIcon,
@@ -36,6 +37,7 @@ export function SettingsDialog({
   onOpenChange: (open: boolean) => void;
   onSectionChange: (section: SettingsSection) => void;
 }) {
+  const access = useAccess();
   const contentRef = useRef<HTMLDivElement>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,7 +89,7 @@ export function SettingsDialog({
           </nav>
           <ScrollArea className="h-full min-h-0 min-w-0 rounded-lg border">
             <div className="space-y-8 p-4 md:p-6">
-              {section !== "about" ? (
+              {!access.admin ? (<p>可免登录上传、生成、审核和下载自己的周报。模型与业务配置由服务器维护。</p>) : section !== "about" ? (
                 <Configuration
                   key={section}
                   page={section === "models" ? "settings" : section}

@@ -142,3 +142,27 @@ it("provides recovery links for an unexpected render failure", () => {
     screen.getByRole("link", { name: "返回任务历史" }).getAttribute("href"),
   ).toBe("/history");
 });
+
+
+describe("manual refresh", () => {
+  it("refreshes files and events and confirms completion even during execution", async () => {
+    openTask({...paused, worker_active: true});
+    await screen.findByRole("heading", {name:"缺少材料的任务"});
+    vi.mocked(fetch).mockClear();
+    const button = screen.getByRole("button", {name:"刷新任务"});
+    expect(button.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(button);
+    await screen.findByText(/已刷新 ·/);
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+    expect(urls).toContain("/api/runs/task-missing-sales/files");
+    expect(urls).toContain("/api/runs/task-missing-sales/events");
+  });
+  it("reports a refresh failure and lets the user retry", async () => {
+    openTask(paused);
+    await screen.findByRole("heading", {name:"缺少材料的任务"});
+    vi.mocked(fetch).mockRejectedValue(new Error("网络中断"));
+    fireEvent.click(screen.getByRole("button", {name:"刷新任务"}));
+    await screen.findByText("刷新失败，请重试");
+    expect(screen.getByRole("button", {name:"刷新任务"}).hasAttribute("disabled")).toBe(false);
+  });
+});

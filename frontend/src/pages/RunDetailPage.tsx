@@ -44,13 +44,29 @@ function RunWorkspace({ id }: { id: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const cursor = useRef(0);
   const discovered = useRef<number | null>(null);
-  const refresh = () =>
-    request<StateSnapshot>(`/runs/${id}`)
-      .then((raw) => {
-        setState(normalizeSnapshot(raw));
-        setLoadError("");
-      })
-      .catch((e) => setLoadError(String(e)));
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState("");
+  async function refresh() {
+    setRefreshing(true);
+    setRefreshMessage("正在刷新…");
+    try {
+      const [raw, audit, manifest] = await Promise.all([
+        request<StateSnapshot>(`/runs/${id}`),
+        request<{ events: TaskEvent[] }>(`/runs/${id}/events`),
+        request<{ files: TaskFile[] }>(`/runs/${id}/files`),
+      ]);
+      setState(normalizeSnapshot(raw));
+      setFiles(manifest.files ?? []);
+      setEvents(prev => [...new Map([...prev, ...(audit.events ?? [])].map(e => [e.seq, e])).values()].sort((a,b) => a.seq-b.seq));
+      setLoadError("");
+      setRefreshMessage(`已刷新 · ${new Date().toLocaleTimeString()}`);
+    } catch (e) {
+      setLoadError(String(e));
+      setRefreshMessage("刷新失败，请重试");
+    } finally {
+      setRefreshing(false);
+    }
+  }
   useEffect(() => {
     let active = true;
     let pending = false;
@@ -72,7 +88,7 @@ function RunWorkspace({ id }: { id: string }) {
         const batch = audit.events ?? [];
         if (batch.length) {
           cursor.current = batch[batch.length - 1].seq;
-          setEvents((prev) => [...prev, ...batch]);
+          setEvents((prev) => [...new Map([...prev, ...batch].map(e => [e.seq, e])).values()].sort((a,b) => a.seq-b.seq));
         }
       } catch (e) {
         if (active) setLoadError(String(e));
@@ -215,9 +231,10 @@ function RunWorkspace({ id }: { id: string }) {
           variant="ghost"
           aria-label="刷新任务"
           onClick={() => void refresh()}
-          disabled={active}
+          title="刷新任务状态、文件和执行记录（不会重新生成）"
+          disabled={refreshing}
         >
-          <RefreshCwIcon />
+          <RefreshCwIcon className={refreshing ? "animate-spin" : ""} />
         </Button>
         <Button
           size="sm"
@@ -237,6 +254,7 @@ function RunWorkspace({ id }: { id: string }) {
       </WorkspaceHeader>
       <div className="min-h-0 flex-1 overflow-auto" id="task-scroll">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+          {refreshMessage && <p role="status" className="text-xs text-muted-foreground">{refreshMessage}</p>}
           {(error || workerError || loadError) && (
             <div role="alert" className="error">
               {error || String(workerError || loadError)}

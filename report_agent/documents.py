@@ -5,10 +5,6 @@ from __future__ import annotations
 import hashlib
 import re
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -109,7 +105,12 @@ def build_template(path):
 
 
 def chart(metrics, base):
-    plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    plt.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "Noto Sans CJK JP", "DejaVu Sans"]
     plt.rcParams["axes.unicode_minus"] = False
     files = []
     regions = [g for g in metrics["groups"] if g["dimension"] == "region"]

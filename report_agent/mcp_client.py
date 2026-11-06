@@ -73,7 +73,7 @@ class Gateway:
             k: v
             for k, v in os.environ.items()
             if k.upper()
-            in {"PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA"}
+            in {"PATH", "HOME", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA"}
         }
         env.update(
             {
@@ -82,6 +82,7 @@ class Gateway:
                 "PYTHONPATH": str(ROOT),
                 "PYTHONUTF8": "1",
                 "MPLBACKEND": "Agg",
+                "MPLCONFIGDIR": str(DATA / "matplotlib-cache"),
             }
         )
         log = self.stack.enter_context((DATA / "mcp.log").open("a", encoding="utf-8"))

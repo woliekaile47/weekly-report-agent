@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, StrictInt
 
+from report_agent import access
 from report_agent.config import ROOT, connection, snapshot, validate_files
 from report_agent.models import Review, TaskSpec, WorkflowError
 from report_agent.service import Service
@@ -25,6 +26,13 @@ from report_agent.store import task_path
 app = FastAPI(title="经营周报员工", version="2.0")
 service = Service()
 tasks = {}
+
+access.install(app)
+
+
+@app.get("/api/session")
+def session():
+    return {"admin": True, "public": False}
 
 
 def _sse(event_type, data, seq=None):
@@ -89,12 +97,16 @@ def health():
 
 
 @app.get("/api/runs")
-def list_runs():
-    return {"runs": service.store.list()}
+def list_runs(request: Request):
+    runs = service.store.list()
+    if access.ENABLED and request.state.owner != "admin":
+        runs = [r for r in runs if access.owned(r["id"], request.state.owner)]
+    return {"runs": runs}
 
 
 @app.post("/api/runs")
 async def create(
+    request: Request,
     spec: str = Form(...),
     sales: UploadFile | None = File(None),
     minutes: UploadFile | None = File(None),
@@ -104,6 +116,7 @@ async def create(
     try:
         values = await read_uploads(sales=sales, minutes=minutes, master=master)
         task_id = service.create(TaskSpec.model_validate_json(spec), values, json.loads(import_options))
+        access.claim(task_id, getattr(request.state, "owner", "local"))
         start(task_id)
         return {"id": task_id, "status": "pending"}
     except (ValueError, WorkflowError) as exc:

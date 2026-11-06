@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, it, vi } from "vitest";
 import { request } from "@/api/client";
 import { UploadPage } from "./UploadPage";
-import { describeIsoWeek, lastCompleteIsoWeek } from "@/lib/iso-week";
+import { describeIsoWeek, currentIsoWeek } from "@/lib/iso-week";
 
 vi.mock("@/api/client", () => ({ request: vi.fn() }));
 // The workspace header is outside the form and has its own sidebar tests.
@@ -47,7 +47,7 @@ it("keeps focus on year and week while clicking, typing and using arrow keys", a
   const title = screen.getByLabelText("任务名称") as HTMLInputElement;
   const year = screen.getByLabelText("年份") as HTMLInputElement;
   const week = screen.getByLabelText("周次") as HTMLInputElement;
-  const defaultPeriod = lastCompleteIsoWeek();
+  const defaultPeriod = currentIsoWeek();
   expect(Number(year.value)).toBe(defaultPeriod.year);
   expect(Number(week.value)).toBe(defaultPeriod.week);
   expect(screen.getByText(describeIsoWeek(defaultPeriod.year, defaultPeriod.week))).toBeTruthy();

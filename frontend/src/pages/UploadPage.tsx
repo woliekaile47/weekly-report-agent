@@ -1,5 +1,6 @@
+import { useAccess } from "@/lib/access";
 // Form uses DeerFlow input-box/InputGroup shell, e0f5483 (MIT), with weekly-report inputs.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpIcon, ChevronDownIcon, LoaderIcon } from "lucide-react";
@@ -14,17 +15,30 @@ import {
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { AttachmentInput } from "@/components/workspace/attachment-input";
 import { useSettingsDialog } from "@/components/workspace/settings-context";
-import { describeIsoWeek, isoWeekStart, lastCompleteIsoWeek } from "@/lib/iso-week";
+import { describeIsoWeek, isoWeekStart, currentIsoWeek } from "@/lib/iso-week";
 
 export function UploadPage() {
-  const [defaultPeriod] = useState(lastCompleteIsoWeek);
+  const access = useAccess();
+  const [defaultPeriod] = useState(currentIsoWeek);
   const [year, setYear] = useState(String(defaultPeriod.year));
   const [week, setWeek] = useState(String(defaultPeriod.week));
+  const [periodEdited, setPeriodEdited] = useState(false);
+  useEffect(() => {
+    const update = () => {
+      if (periodEdited) return;
+      const current = currentIsoWeek();
+      setYear(String(current.year)); setWeek(String(current.week));
+    };
+    const timer = window.setInterval(update, 30000);
+    window.addEventListener("focus", update);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", update); };
+  }, [periodEdited]);
   const validPeriod = isoWeekStart(Number(year), Number(week)) !== null;
   const { openSettings } = useSettingsDialog();
   const client = useQueryClient();
   const { data: config } = useQuery({
     queryKey: ["connection-summary"],
+    enabled: access.admin,
     queryFn: () => request<{ connection: { LLM_MODEL: string } }>("/config"),
   });
   const navigate = useNavigate();
@@ -96,8 +110,8 @@ export function UploadPage() {
                     type="number"
                     min={2000}
                     max={2100}
-                    defaultValue={defaultPeriod.year}
-                    onChange={(event) => setYear(event.target.value)}
+                    value={year}
+                    onChange={(event) => { setPeriodEdited(true); setYear(event.target.value); }}
                     required
                     className="bg-transparent! px-2! text-sm!"
                   />
@@ -109,8 +123,8 @@ export function UploadPage() {
                     type="number"
                     min={1}
                     max={53}
-                    defaultValue={defaultPeriod.week}
-                    onChange={(event) => setWeek(event.target.value)}
+                    value={week}
+                    onChange={(event) => { setPeriodEdited(true); setWeek(event.target.value); }}
                     required
                     className="bg-transparent! px-2! text-sm!"
                   />
@@ -167,9 +181,10 @@ export function UploadPage() {
                     size="sm"
                     className="h-8 max-w-full gap-1 px-1 text-xs text-muted-foreground"
                     onClick={() => openSettings("models")}
+                    disabled={!access.admin}
                   >
                     <span className="truncate">
-                      {config?.connection.LLM_MODEL ?? "模型连接"}
+                      {access.admin ? (config?.connection.LLM_MODEL ?? "模型连接") : "模型已由服务器配置"}
                     </span>
                     <ChevronDownIcon className="size-3" />
                   </Button>
@@ -194,7 +209,7 @@ export function UploadPage() {
               </p>
             )}
             <p className="text-center text-[11px] leading-6 text-muted-foreground/70">
-              任务会保留在最近列表中。通过程序质检后，等待人工审核。
+              任务保留在当前浏览器中，清除浏览器数据后无法找回。通过程序质检后，由你审核并确认交付。公开体验每个 IP 每天可新建 3 份周报，请勿上传无权分享的材料。
             </p>
           </form>
         </div>

@@ -18,3 +18,8 @@ evals/results/
 results/
 .promptfoo/
 backup-location.txt
+
+# Deployment credentials
+*.pem
+*.key
+service.env

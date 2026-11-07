@@ -9,6 +9,14 @@ class TaskSpec(BaseModel):
     year: int = Field(default=2026, ge=2000, le=2100)
     week: int = Field(default=44, ge=1, le=53)
     focus: str = Field(default="", max_length=2000)
+    news_queries: list[str] = Field(default_factory=list, max_length=3)
+
+    @field_validator("news_queries")
+    @classmethod
+    def bounded_queries(cls, values):
+        if any(not q.strip() or len(q) > 160 for q in values):
+            raise ValueError("每条公开新闻关键词须为1至160字，最多3条")
+        return values
 
     @model_validator(mode="after")
     def valid_week(self):
@@ -54,8 +62,16 @@ class RevisionResponse(BaseModel):
     source_ids: list[str] = Field(default_factory=list)
 
 
+class NewsAssessment(BaseModel):
+    source_id: str
+    verdict: Literal["support", "conflict", "unverified"]
+    explanation: str = Field(min_length=1, max_length=800)
+    citations: list[Evidence] = Field(default_factory=list, max_length=5)
+
+
 class Draft(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    news_assessments: list[NewsAssessment] = Field(default_factory=list, max_length=30)
     summary: str
     anomalies: list[Anomaly]
     conflicts: list[str] = Field(default_factory=list)

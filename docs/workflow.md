@@ -1,3 +1,19 @@
+> 2026-11-07：新增新闻节点，主流程与执行图谱已同步更新。新闻失败显示未核实，不把未找到结果当作纪要错误。
+
+```mermaid
+flowchart TD
+  ingest[识别材料] --> calculate[计算指标]
+  calculate --> evidence[核对纪要]
+  evidence --> news[检索公开新闻并记录时间与来源]
+  news --> analyze[经营分析与辅助核验]
+  analyze --> render[生成报告]
+  render --> quality{程序质检}
+  quality -->|通过| review{人工审核}
+  quality -->|返工| analyze
+  review -->|退回| analyze
+  review -->|通过| finalize[交付含新闻证据的ZIP]
+```
+
 # 经营周报员工参赛流程与实现对照
 
 经营周报员工接收统计周期、销售明细和周会纪要，完成材料校验、常规经营分析、异常解释及 Word 生成；程序质检通过后进入人工审核，审核通过当前版本后正式交付。缺材料、工具多次失败或执行超限时，保存进度并等待人工处理。

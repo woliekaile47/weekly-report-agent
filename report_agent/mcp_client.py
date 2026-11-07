@@ -14,7 +14,7 @@ from report_agent.config import DATA, ROOT
 from report_agent.models import WorkflowError
 from report_agent.store import digest, task_path
 
-TOOLS = {"read_sales", "read_minutes", "compute_metrics", "generate_report", "inspect_report"}
+TOOLS = {"search_news", "read_sales", "read_minutes", "compute_metrics", "generate_report", "inspect_report"}
 
 
 class Gateway:
@@ -127,7 +127,7 @@ class Gateway:
             }
         )
         # Generated files and their inspection are mutable; never reuse an existence-only cache.
-        cacheable = name not in {"generate_report", "inspect_report"}
+        cacheable = name not in {"generate_report", "inspect_report", "search_news"}
         cached = self.store.cached(key) if cacheable else None
         if cached is not None and (
             not cached.get("file") or task_path(self.task_id, cached["file"]).exists()

@@ -10,13 +10,14 @@ flowchart TB
     INGEST --> CALCULATE["周期覆盖检查与常规经营分析<br/>公司及区域指标、品类表现、前五单品"]
     CALCULATE --> ANOMALY["定位经营异常<br/>区域与门店实收环比超过 ±10% 逐项列出"]
     ANOMALY --> EVIDENCE["纪要准入与证据整理<br/>检查周次、保留原文编号、提示纪要冲突"]
-    EVIDENCE --> ANALYZE["形成原因解释与周报初稿<br/>无依据写原因待核实；冲突以系统数据为准"]
+    EVIDENCE --> NEWS["公开新闻检索<br/>关键词、来源链接、发布时间及检索时间<br/>未找到或失败不代表纪要错误"]
+    NEWS --> ANALYZE["形成原因解释与周报初稿<br/>无依据写原因待核实；冲突以系统数据为准<br/>新闻支持或冲突须有可追溯引用，待人工核验"]
     ANALYZE --> RENDER["生成 Word 与图表<br/>指标由程序填入，生成至少 2 张图表"]
     RENDER --> QUALITY["程序自动质检<br/>内容、数值、引用、图表<br/>Word 实际正文页数不超过 3 页"]
     QUALITY --> PASS{"程序判定通过？"}
     PASS -->|是| HUMAN{"人工审核当前版本"}
     HUMAN -->|通过| FINALIZE["交付前程序校验<br/>质检结果、批准版本、文件摘要一致"]
-    FINALIZE --> DONE(["正式交付<br/>Word、质检记录、来源及审核记录"])
+    FINALIZE --> DONE(["正式交付<br/>Word、质检记录、来源、新闻核验及审核记录"])
 
     PASS -->|否| LIMIT{"自动修正未达上限？"}
     LIMIT -->|是：最多 2 轮| REPAIR["按问题类别定向返工<br/>材料、证据、文字或版式<br/>保留未受影响结果，详见返工图"]

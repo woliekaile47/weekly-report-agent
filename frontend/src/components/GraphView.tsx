@@ -50,12 +50,13 @@ const LAYOUT: Record<GraphNodeName, { x: number; y: number; label: string }> = {
   ingest: { x: 260, y: 0, label: "1. 识别材料" },
   calculate: { x: 260, y: 64, label: "2. 计算指标" },
   evidence: { x: 260, y: 128, label: "3. 核对纪要" },
-  analyze: { x: 260, y: 192, label: "4. 分析经营" },
-  render: { x: 260, y: 256, label: "5. 生成周报" },
-  quality: { x: 260, y: 320, label: "6. 自动质检" },
+  news: { x: 260, y: 192, label: "4. 新闻核验线索" },
+  analyze: { x: 260, y: 256, label: "5. 分析经营" },
+  render: { x: 260, y: 320, label: "6. 生成周报" },
+  quality: { x: 260, y: 384, label: "7. 自动质检" },
   rework: { x: 10, y: 256, label: "定向返工" },
-  human_review: { x: 260, y: 384, label: "7. 人工审核" },
-  finalize: { x: 260, y: 448, label: "8. 交付成果" },
+  human_review: { x: 260, y: 448, label: "8. 人工审核" },
+  finalize: { x: 260, y: 512, label: "9. 交付成果" },
 };
 
 export function GraphView({ currentNode, completedNodes }: GraphViewProps) {
@@ -122,8 +123,12 @@ export function GraphView({ currentNode, completedNodes }: GraphViewProps) {
         style: edgeStyle(completedNodes.includes("evidence")),
       },
       {
-        id: "e-evidence-analyze",
-        source: "evidence",
+        id: "e-evidence-news",
+        source: "evidence", target: "news", style: edgeStyle(completedNodes.includes("news")),
+      },
+      {
+        id: "e-news-analyze",
+        source: "news",
         target: "analyze",
         style: edgeStyle(completedNodes.includes("analyze")),
       },

@@ -1,6 +1,6 @@
 name: 经营周报员工
 skill: skills/weekly-report/SKILL.md
-allowed_tools: [read_sales, read_minutes, compute_metrics, generate_report, inspect_report]
+allowed_tools: [search_news, read_sales, read_minutes, compute_metrics, generate_report, inspect_report]
 limits:
   model_calls: 8
   model_input_characters: 160000

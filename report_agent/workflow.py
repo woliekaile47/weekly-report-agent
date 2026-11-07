@@ -37,6 +37,7 @@ class ReportState(TypedDict, total=False):
     reason: str
     error_kind: str
     sales: dict
+    news: dict
     metrics: dict
     minutes: dict
     draft: dict
@@ -195,7 +196,15 @@ def build_graph(store, gateway, checkpointer, model=generate):
             ),
             {"id": "data-quality", "label": "退货、重复记录及无记录日说明", "kind": "data_quality"},
         ]
-        return {"minutes": minutes, "metrics": metrics, "work_items": work_items, "route": "analyze"}
+        return {"minutes": minutes, "metrics": metrics, "work_items": work_items, "route": "news"}
+
+    async def news(s):
+        if "search_news" not in s["bundle"]["employee"]["allowed_tools"]:
+            result = {"status": "skipped", "message": "此任务旧配置未启用新闻工具，未进行外部核验", "sources": []}
+        else:
+            result = await gateway.call("search_news", {"spec": s["spec"]})
+        store.event(s["task_id"], "news_retrieved", {"status": result["status"], "count": len(result["sources"])})
+        return {"news": result, "route": "analyze"}
 
     async def analyze(s):
         draft = await model(s, store)
@@ -424,6 +433,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
         atomic_json(base / "配置快照.json", s["bundle"])
         atomic_json(base / "指标与材料来源.json", s["metrics"])
         atomic_json(base / "完整纪要原文.json", s["minutes"])
+        atomic_json(base / "新闻核验线索.json", {"search": s.get("news", {"status": "not_run"}), "model_assessments": s["draft"].get("news_assessments", []), "notice": "模型判断仅供人工核验"})
         atomic_json(base / "执行事件.json", store.events(s["task_id"]))
         atomic_json(
             base / "交付清单.json",
@@ -462,6 +472,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
         "ingest": ingest,
         "calculate": calculate,
         "evidence": evidence,
+        "news": news,
         "analyze": analyze,
         "render": render,
         "quality": quality,

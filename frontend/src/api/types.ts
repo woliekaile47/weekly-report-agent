@@ -2,6 +2,7 @@ export type GraphNodeName =
   | "ingest"
   | "calculate"
   | "evidence"
+  | "news"
   | "analyze"
   | "render"
   | "quality"
@@ -42,6 +43,7 @@ export interface Evidence {
   quote: string;
 }
 export interface Draft {
+  news_assessments?: {source_id: string; verdict: string; explanation: string; citations: {source_id:string;quote:string}[]}[];
   summary: string;
   anomalies: {
     metric_id: string;
@@ -55,6 +57,7 @@ export interface Draft {
   review_response: string;
 }
 export interface StateSnapshot {
+  news?: { status: string; message: string; retrieved_at?: string; sources: {id: string; title: string; url: string; publisher: string; published_at: string; time_status: string; excerpt: string; verdict: string}[] };
   task_id?: string;
   status?: RunStatus;
   spec?: { title: string; year: number; week: number; focus: string };

@@ -14,6 +14,7 @@ export const NODES: Record<string, string> = {
   ingest: "识别材料",
   calculate: "计算指标",
   evidence: "核对纪要",
+  news: "新闻核验线索",
   analyze: "分析经营",
   render: "生成周报",
   quality: "自动质检",

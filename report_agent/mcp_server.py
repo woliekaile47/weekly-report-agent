@@ -85,5 +85,12 @@ def inspect_report(
     return invoke(inspect, task_id, artifact, metrics, minutes, draft, bundle, feedback)
 
 
+@mcp.tool()
+def search_news(spec: dict) -> dict:
+    """Retrieve bounded public news leads with URLs and publication dates; no truth certification."""
+    from report_agent.news import search_news as search
+    return invoke(search, spec)
+
+
 if __name__ == "__main__":
     mcp.run(transport="stdio")

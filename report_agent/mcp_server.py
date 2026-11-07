@@ -68,11 +68,12 @@ def generate_report(
     bundle: dict,
     feedback: list,
     render_options: dict | None = None,
+    news: dict | None = None,
 ) -> ToolResult[ArtifactResult]:
     """Render a versioned Word report from a business-editable docxtpl template, with two charts."""
     from report_agent.documents import generate_report as render
 
-    return invoke(render, task_id, version, metrics, minutes, draft, bundle, feedback, render_options)
+    return invoke(render, task_id, version, metrics, minutes, draft, bundle, feedback, render_options, news)
 
 
 @mcp.tool()

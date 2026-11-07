@@ -18,10 +18,11 @@ from langgraph.types import interrupt
 
 from report_agent.data_tools import change_exceeds
 from report_agent.documents import sha256
-from report_agent.model import generate, ground_dates
+from report_agent.model import generate, ground_dates, plan_queries
 from report_agent.models import Review, WorkflowError
+from report_agent.news import screen_queries
 from report_agent.rework import changed_inputs, merge_revision, plan_rework, register_review, verify_revisions
-from report_agent.store import atomic_json, task_path
+from report_agent.store import atomic_json, digest, task_path
 
 
 class ReportState(TypedDict, total=False):
@@ -62,7 +63,10 @@ class ReportState(TypedDict, total=False):
     work_items: list
 
 
-def build_graph(store, gateway, checkpointer, model=generate):
+def build_graph(store, gateway, checkpointer, model=generate, planner=None):
+    # Test model replacements must never reach the real planner.
+    planner = planner or (plan_queries if model is generate else None)
+
     def wrap(name, fn):
         async def node(state):
             started = time.monotonic()
@@ -199,10 +203,33 @@ def build_graph(store, gateway, checkpointer, model=generate):
         return {"minutes": minutes, "metrics": metrics, "work_items": work_items, "route": "news"}
 
     async def news(s):
-        if "search_news" not in s["bundle"]["employee"]["allowed_tools"]:
+        employee = s["bundle"]["employee"]
+        if "search_news" not in employee["allowed_tools"]:
             result = {"status": "skipped", "message": "此任务旧配置未启用新闻工具，未进行外部核验", "sources": []}
-        else:
-            result = await gateway.call("search_news", {"spec": s["spec"]})
+            store.event(s["task_id"], "news_retrieved", {"status": result["status"], "count": 0})
+            return {"news": result, "route": "analyze"}
+        manual = s["spec"].get("news_queries", [])
+        plan_key = digest({"sources": s["minutes"]["sources"], "manual": manual, "spec": [s["spec"]["year"], s["spec"]["week"]]})
+        # Rework and resume reuse the same search: unchanged minutes mean no new provider calls.
+        if s.get("news", {}).get("plan_key") == plan_key:
+            return {"route": "analyze"}
+        candidates, plan_error = {"queries": []}, ""
+        if planner:
+            try:
+                candidates = await planner(s, store)
+            except WorkflowError as exc:
+                # External checks are auxiliary: a failed plan must not block the sales report.
+                plan_error = str(exc)
+        search = employee.get("search", {})
+        screened = screen_queries(
+            candidates, s["minutes"], s["metrics"], search.get("blocked_terms", []), manual, search.get("max_queries", 3)
+        )
+        store.event(s["task_id"], "search_planned", {**screened, "error": plan_error})
+        result = await gateway.call("search_news", {"spec": {**s["spec"], "news_queries": screened["queries"]}})
+        if plan_error and not screened["queries"]:
+            result["status"] = "plan_failed"
+            result["message"] = "未能自动生成检索词，本周未做外部核对；销售分析不受影响。原因：" + plan_error
+        result = {**result, "plan": screened, "plan_key": plan_key}
         store.event(s["task_id"], "news_retrieved", {"status": result["status"], "count": len(result["sources"])})
         return {"news": result, "route": "analyze"}
 
@@ -272,6 +299,7 @@ def build_graph(store, gateway, checkpointer, model=generate):
                     for k in ("task_id", "version", "metrics", "minutes", "draft", "bundle", "feedback")
                 },
                 "render_options": s.get("render_options", {}),
+                "news": s.get("news", {}),
             },
         )
         return {"artifact": artifact, "draft": s["draft"], "metrics": metrics, "route": "quality"}
@@ -498,13 +526,15 @@ async def page_inspection(state, result):
         task_path(state["task_id"], state["artifact"]["file"]),
         state["bundle"]["employee"]["limits"]["tool_timeout_seconds"],
     )
+    quality = state["bundle"]["employee"]["quality"]
     result = {
         **result,
         "checks": [
             *result["checks"],
             {
                 "name": "Word实际页数",
-                "passed": audit.get("pages", 999) <= state["bundle"]["employee"]["quality"]["max_pages"],
+                "passed": audit.get("body_pages", audit.get("pages", 999)) <= quality["max_pages"]
+                and audit.get("pages", 999) <= quality.get("max_total_pages", quality["max_pages"]),
                 "details": audit.get("details", ""),
             },
         ],

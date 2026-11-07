@@ -1,6 +1,10 @@
 name: 经营周报员工
 skill: skills/weekly-report/SKILL.md
 allowed_tools: [search_news, read_sales, read_minutes, compute_metrics, generate_report, inspect_report]
+search:
+  # 模型生成的检索词含以下词语时不外发；门店名、参会人名和金额由程序另行拦截。
+  max_queries: 3
+  blocked_terms: [青禾, 实收, 销售额, 毛利, 目标达成, 手工台账, 会员补偿, 内部, 机密]
 limits:
   model_calls: 8
   model_input_characters: 160000
@@ -17,7 +21,8 @@ limit_reasons:
 quality:
   min_characters: 160
   max_characters: 1800
-  max_pages: 3
+  max_pages: 3  # 周报格式要求：正文不超过3页；附录（来源与审核记录）不计入
+  max_total_pages: 5
   min_charts: 2
   required_sections: [本周摘要, 核心指标, 品类与单品, 异常与原因, 数据质量说明, 下周关注事项]
   forbidden_words: [保证盈利, 内部绝密]
@@ -73,6 +78,6 @@ rework:
     文件完整: {category: layout, sections: []}
     Word实际页数: {category: layout, sections: []}
   compact_layout:
-    font_points: 8
+    font_points: 9
     space_after_points: 2
-    line_spacing: 1
+    line_spacing: 1.05

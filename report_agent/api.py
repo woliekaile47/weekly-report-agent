@@ -42,7 +42,7 @@ def _sse(event_type, data, seq=None):
 
 
 def public(state):
-    from report_agent.documents import report_quality_notes
+    from report_agent.documents import anomaly_groups, reader_text, report_quality_notes
 
     result = {k: v for k, v in state.items() if k not in {"bundle"}} | {
         "limits": state["bundle"]["employee"]["limits"],
@@ -55,6 +55,10 @@ def public(state):
     result["total_active_seconds"] = sum(e["payload"].get("duration_seconds", 0) for e in audit if e["kind"] == "node_completed")
     if state.get("metrics") and state.get("draft"):
         result["report_quality_notes"] = report_quality_notes(state["metrics"], state["draft"])
+        result["report_anomaly_groups"] = anomaly_groups(state["metrics"], state["draft"], state.get("news"))
+        tokens, week = state["metrics"]["tokens"], state["metrics"]["week"]
+        result["report_summary"] = reader_text(state["draft"].get("summary", ""), tokens, week)
+        result["report_actions"] = [reader_text(a, tokens, week) for a in state["draft"].get("actions", [])]
     return result
 
 

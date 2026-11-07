@@ -1,6 +1,7 @@
 """Bounded public-keyword search. Search snippets are leads, never proof of a claim."""
 
 import os
+import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -31,13 +32,68 @@ def validate_assessments(draft, state):
                 raise WorkflowError("新闻日期不明或超出范围，只能标记无法核实", "model")
 
 
+def attendee_names(sources):
+    """Names listed in the attendance line and owner column of the minutes action table."""
+    names, owner_column = set(), None
+    for source in sources:
+        text = source["text"]
+        if re.match(r"\s*(参会人员|参会人|出席人员|出席)\s*[:：]", text):
+            for part in re.split(r"[、，,；;：:]", re.sub(r"（[^）]*）|\([^)]*\)", "", text)):
+                part = part.strip()
+                if 2 <= len(part) <= 4 and part not in {"参会人员", "参会人", "出席人员", "出席", "记录"}:
+                    names.add(part)
+        cells = [c.strip() for c in text.split("|")]
+        if "负责人" in cells:
+            owner_column = cells.index("负责人")
+        elif owner_column is not None and len(cells) > owner_column:
+            names.update(n.strip() for n in re.split(r"[、，,/]", cells[owner_column]) if 2 <= len(n.strip()) <= 4)
+    return names
+
+
+def screen_queries(plan, minutes, metrics, blocked_terms=(), manual=(), limit=3):
+    """Program gate for model-written queries: internal names and figures never reach the search provider."""
+    sources = {s["id"]: s["text"] for s in minutes["sources"]}
+    stores = [g["label"] for g in metrics["groups"] if g["dimension"] == "store"]
+    terms = {*blocked_terms, *stores, *(s[:-1] for s in stores if s.endswith("店") and len(s) > 3)}
+    names = attendee_names(minutes["sources"])
+    items = [{"query": q.strip(), "source_id": "", "claim": "", "origin": "manual"} for q in manual if q.strip()]
+    dropped = []
+    for item in plan.get("queries", []):
+        query = item["query"].strip()
+        if item["source_id"] not in sources:
+            reason = "引用了不存在的纪要编号"
+        elif any(term and term in query for term in terms):
+            reason = "包含门店或配置的内部词"
+        elif any(name in query for name in names) or re.search(r"[\u4e00-\u9fff]某", query):
+            reason = "包含人名"
+        elif re.search(r"\d[\d,.]*\s*(?:元|万|%|％|笔|份)|\b[A-Z]{1,3}\d{2,}\b", query):
+            reason = "包含金额、比例或内部编码"
+        else:
+            items.append({**item, "query": query, "origin": "auto"})
+            continue
+        dropped.append({"source_id": item["source_id"], "reason": reason})
+    unique = list({item["query"]: item for item in items}.values())[:limit]
+    return {"queries": [item["query"] for item in unique], "items": unique, "dropped": dropped}
+
+
+def assign_regions(draft, minutes, metrics):
+    """Attach each assessment to a report region using the cited minutes line, not the model's guess."""
+    sources = {s["id"]: s["text"] for s in minutes["sources"]}
+    regions = [g["label"] for g in metrics["groups"] if g["dimension"] == "region"]
+    stores = {g["label"]: g.get("region") for g in metrics["groups"] if g["dimension"] == "store"}
+    for item in draft.get("news_assessments", []):
+        text = sources.get(item["source_id"], "")
+        found = {r for r in regions if r in text} | {r for s, r in stores.items() if r and s in text}
+        item["region"] = found.pop() if len(found) == 1 else "全公司"
+
+
 def search_news(spec):
     queries = list(dict.fromkeys(q.strip() for q in spec.get("news_queries", []) if q.strip()))[:3]
     start = date.fromisocalendar(spec["year"], spec["week"], 1)
     end = start + timedelta(days=6)
     result = {
         "status": "skipped",
-        "message": "未填写公开检索关键词，未进行新闻核验。",
+        "message": "本周纪要没有可对外核实的公开事项，未进行外部检索。",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "start_date": str(start - timedelta(days=30)),
         "end_date": str(end),

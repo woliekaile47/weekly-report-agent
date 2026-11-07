@@ -62,8 +62,19 @@ class RevisionResponse(BaseModel):
     source_ids: list[str] = Field(default_factory=list)
 
 
+class SearchQuery(BaseModel):
+    query: str = Field(min_length=1, max_length=160)
+    source_id: str = Field(min_length=1)
+    claim: str = Field(default="", max_length=300)
+
+
+class SearchPlan(BaseModel):
+    queries: list[SearchQuery] = Field(default_factory=list, max_length=10)
+
+
 class NewsAssessment(BaseModel):
     source_id: str
+    region: str = ""
     verdict: Literal["support", "conflict", "unverified"]
     explanation: str = Field(min_length=1, max_length=800)
     citations: list[Evidence] = Field(default_factory=list, max_length=5)

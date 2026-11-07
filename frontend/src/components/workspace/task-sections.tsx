@@ -315,12 +315,7 @@ export function TaskOutputs({
                   {reportStageLabel(state)}
                 </span>
               </div>
-              <p>{sub(draft.summary, tokens)}</p>
-              {draft.conflicts?.map((c, i) => (
-                <p className="conflict" key={i}>
-                  {sub(c, tokens)}
-                </p>
-              ))}
+              <p>{state.report_summary ?? sub(draft.summary, tokens)}</p>
               {metrics && (
                 <>
                   <h2>核心经营指标</h2>
@@ -331,30 +326,25 @@ export function TaskOutputs({
                     ]}
                   />
                   <h2>异常与原因</h2>
-                  {draft.anomalies.map((a) => {
-                    const m = metrics.anomalies.find(
-                      (x) => x.id === a.metric_id,
-                    );
-                    return (
-                      <article className="finding" key={a.metric_id}>
-                        <h3>
-                          {m?.label ?? a.metric_id}
-                          <span className="tag">{pct(m?.change ?? null)}</span>
-                        </h3>
-                        <p>
-                          {a.uncertain && (
-                            <span className="muted">原因待核实：</span>
-                          )}
-                          {sub(a.reason, tokens)}
-                        </p>
-                        {a.evidence.map((ev, i) => (
-                          <blockquote key={i}>
-                            [{ev.source_id}] {ev.quote}
-                          </blockquote>
-                        ))}
-                      </article>
-                    );
-                  })}
+                  {state.report_anomaly_groups?.map((group) => (
+                    <section className="anomaly-group" key={group.region}>
+                      <h3 className="region-band">{group.header}</h3>
+                      {group.rows.map((row, i) => (
+                        <article className={`finding ${row.kind}`} key={row.metric_id ?? `${row.kind}-${i}`}>
+                          <h3>
+                            {row.label}
+                            <span className="tag">{row.change}</span>
+                          </h3>
+                          <p>{row.text}</p>
+                          {row.evidence.map((ev, j) => (
+                            <blockquote key={j}>
+                              [{ev.source_id}] {ev.quote}
+                            </blockquote>
+                          ))}
+                        </article>
+                      ))}
+                    </section>
+                  ))}
                   <h2>品类表现</h2>
                   <MetricsTable
                     rows={metrics.groups.filter(
@@ -376,7 +366,7 @@ export function TaskOutputs({
               )}
               <h2>下周关注事项</h2>
               <ul>
-                {draft.actions.map((a, i) => (
+                {(state.report_actions ?? draft.actions).map((a, i) => (
                   <li key={i}>{sub(a, tokens)}</li>
                 ))}
               </ul>
@@ -504,7 +494,9 @@ export function TaskOutputs({
         <section className="card">
           <h2>材料识别与口径</h2>
           {state.news && <div className="my-4 rounded border p-4">
-            <h3>新闻核验线索</h3><p>{state.news.message}</p>
+            <h3>外部信息核对</h3><p>{state.news.message}</p>
+            {state.news.plan?.items.map((q, i) => <p key={i} className="text-sm">{q.origin === "auto" ? "自动检索" : "手动补充"}：{q.query}{q.claim && `（核实：${q.claim}）`}</p>)}
+            {!!state.news.plan?.dropped.length && <p className="text-xs text-muted-foreground">已拦截 {state.news.plan.dropped.length} 条可能含内部信息的检索词，未发送：{state.news.plan.dropped.map(d => d.reason).join("、")}</p>}
             {state.draft?.news_assessments?.map((a,i) => <div key={i} className="my-2"><strong>{a.source_id} · 模型判断（待人工确认）：{a.verdict === "support" ? "存在支持线索" : a.verdict === "conflict" ? "存在冲突线索" : "无法核实"}</strong><p>{a.explanation}</p>{a.citations.map(c => <p key={c.source_id}>[{c.source_id}] {c.quote}</p>)}</div>)}
             <p className="text-xs">检索时间：{state.news.retrieved_at ?? "未检索"}</p>
             {state.news.sources.map(n => <article key={n.id} className="my-3 border-t pt-2">

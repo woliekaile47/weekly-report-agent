@@ -43,7 +43,7 @@ export interface Evidence {
   quote: string;
 }
 export interface Draft {
-  news_assessments?: {source_id: string; verdict: string; explanation: string; citations: {source_id:string;quote:string}[]}[];
+  news_assessments?: {source_id: string; region?: string; verdict: string; explanation: string; citations: {source_id:string;quote:string}[]}[];
   summary: string;
   anomalies: {
     metric_id: string;
@@ -56,8 +56,21 @@ export interface Draft {
   actions: string[];
   review_response: string;
 }
+export interface AnomalyGroup {
+  region: string;
+  header: string;
+  rows: {
+    kind: "anomaly" | "conflict" | "external";
+    metric_id?: string;
+    label: string;
+    change: string;
+    text: string;
+    uncertain?: boolean;
+    evidence: Evidence[];
+  }[];
+}
 export interface StateSnapshot {
-  news?: { status: string; message: string; retrieved_at?: string; sources: {id: string; title: string; url: string; publisher: string; published_at: string; time_status: string; excerpt: string; verdict: string}[] };
+  news?: { status: string; message: string; retrieved_at?: string; queries?: string[]; plan?: { items: { query: string; claim: string; origin: string }[]; dropped: { source_id: string; reason: string }[] }; sources: {id: string; title: string; url: string; publisher: string; published_at: string; time_status: string; excerpt: string; verdict: string}[] };
   task_id?: string;
   status?: RunStatus;
   spec?: { title: string; year: number; week: number; focus: string };
@@ -100,6 +113,9 @@ export interface StateSnapshot {
   minutes?: { year?: number; week?: number; sources: { id: string; text: string }[] };
   draft?: Draft;
   report_quality_notes?: string[];
+  report_anomaly_groups?: AnomalyGroup[];
+  report_summary?: string;
+  report_actions?: string[];
   feedback?: { reviewer: string; feedback: string; version: number }[];
   quality?: {
     passed: boolean;

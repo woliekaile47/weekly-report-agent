@@ -43,7 +43,7 @@ export function ExecutionProgress({ state: s }: { state: StateSnapshot }) {
     evidence: s.minutes?.sources?.length
       ? `已提取 ${s.minutes.sources.length} 条原文，保留来源编号`
       : "识别纪要周期并核对原文依据",
-    news: s.news?.message ?? "按公开关键词查询新闻，保留来源与日期",
+    news: s.news?.message ?? "从纪要中找出可对外核实的事项并自动检索",
     analyze: s.draft
       ? "已生成经营分析，原因与引用保存在周报中"
       : "结合指标与纪要分析经营异常",

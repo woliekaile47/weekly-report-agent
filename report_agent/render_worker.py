@@ -41,6 +41,20 @@ async def inspect_pages(path, timeout=90):
     return result
 
 
+APPENDIX_HEADING = "附录"
+
+
+def page_result(pages, appendix, renderer, pdf, note=""):
+    body = appendix - 1 if appendix else pages
+    return {
+        "pages": pages,
+        "body_pages": body,
+        "renderer": renderer,
+        "pdf": pdf.name,
+        "details": f"{renderer} 实际排版：正文 {body} 页，全文 {pages} 页{note}",
+    }
+
+
 def render_linux(path):
     import re
     import subprocess
@@ -72,12 +86,20 @@ def render_linux(path):
         timeout=10,
     ).stdout
     pages = int(re.search(r"^Pages:\s+(\d+)", output, re.MULTILINE)[1])
-    return {
-        "pages": pages,
-        "renderer": "LibreOffice",
-        "pdf": pdf.name,
-        "details": f"LibreOffice 实际排版 {pages} 页（与 Microsoft Word 可能存在差异）",
-    }
+    appendix = None
+    for number in range(1, pages + 1):
+        text = subprocess.run(
+            ["pdftotext", "-f", str(number), "-l", str(number), str(pdf), "-"],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=10,
+        ).stdout
+        if re.search(r"^\s*" + APPENDIX_HEADING, text, re.MULTILINE):
+            appendix = number
+            break
+    return page_result(pages, appendix, "LibreOffice", pdf, "（与 Microsoft Word 可能存在差异）")
 
 
 def render(path):
@@ -96,14 +118,14 @@ def render(path):
         doc = word.Documents.Open(str(path.resolve()), ReadOnly=True, AddToRecentFiles=False, Visible=False)
         doc.Repaginate()
         pages = doc.ComputeStatistics(2)
+        appendix = None
+        for paragraph in doc.Paragraphs:
+            if paragraph.OutlineLevel == 1 and paragraph.Range.Text.startswith(APPENDIX_HEADING):
+                appendix = paragraph.Range.Information(3)
+                break
         pdf = path.with_suffix(".pdf")
         doc.ExportAsFixedFormat(str(pdf.resolve()), 17)
-        return {
-            "pages": pages,
-            "renderer": "Microsoft Word",
-            "pdf": pdf.name,
-            "details": f"Microsoft Word 实际排版 {pages} 页",
-        }
+        return page_result(pages, appendix, "Microsoft Word", pdf)
     finally:
         if doc:
             doc.Close(False)

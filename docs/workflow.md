@@ -4,7 +4,7 @@
 flowchart TD
   ingest[识别材料] --> calculate[计算指标]
   calculate --> evidence[核对纪要]
-  evidence --> news[检索公开新闻并记录时间与来源]
+  evidence --> news[从纪要自动规划检索词，拦截内部信息后检索并记录来源]
   news --> analyze[经营分析与辅助核验]
   analyze --> render[生成报告]
   render --> quality{程序质检}

@@ -501,6 +501,7 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
     if missing := sorted(observed_regions - target_regions):
         raise WorkflowError("缺少本周实收目标：" + "、".join(missing), "materials")
     store_names = {r["store_id"]: r["store"] for r in data["stores"]}
+    store_regions = {r["store_id"]: r["region"] for r in data["stores"]}
     duplicate_store_names = {name for name, count in Counter(store_names.values()).items() if count > 1}
     product_names = {r["product_id"]: r["product"] for r in data.get("products", rows)}
     duplicate_product_names = {name for name, count in Counter(product_names.values()).items() if count > 1}
@@ -547,6 +548,7 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
             ("target", f"{result['target_rate']:.1f}%" if result["target_rate"] is not None else "不适用"),
         ):
             tokens[f"{key}_{field}"] = val
+        tokens[f"{key}_change_abs"] = f"{abs(change):.1f}%" if change is not None else tokens[f"{key}_change"]
         return result
 
     total = aggregate("total", "全公司", current, old, "total")
@@ -568,6 +570,10 @@ def compute_metrics(task_id, sales, spec, threshold=10, delivery_channel="外卖
                     region=identifier if dimension == "region" else None,
                 )
             )
+            if dimension == "store":
+                groups[-1]["region"] = store_regions.get(identifier)
+            elif dimension == "region":
+                groups[-1]["region"] = identifier
     top = {}
     for row in current:
         top[row["product_id"]] = top.get(row["product_id"], 0) + row["cents"]

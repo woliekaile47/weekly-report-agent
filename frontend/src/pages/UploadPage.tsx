@@ -141,9 +141,9 @@ export function UploadPage() {
                 placeholder="这周需要重点关注哪些区域、门店或经营问题？（可选）"
                 className="min-h-26 border-0 px-4 py-4 text-sm"
               />
-              <label className="px-4 text-sm">公开新闻检索关键词（可选，每行一条，最多3条）
-                <textarea name="news_queries" aria-label="公开新闻检索关键词" rows={2} className="mt-2 w-full rounded border p-2" placeholder="例如：上海 咖啡 消费市场" />
-                <span className="text-xs text-muted-foreground">仅这些关键词会发送至搜索服务，请勿填写内部机密。结果需核对原文，不自动认定纪要真伪。</span>
+              <label className="px-4 text-sm">补充检索关键词（可选，每行一条）
+                <textarea name="news_queries" aria-label="补充检索关键词" rows={2} className="mt-2 w-full rounded border p-2" placeholder="一般不用填，例如：上海 咖啡 消费市场" />
+                <span className="text-xs text-muted-foreground">系统会从纪要中自动找出可对外核实的事项并检索，每个任务最多3条。只有检索词会发给搜索服务，含门店名、人名或金额的自动检索词会被拦截。</span>
               </label>
               <InputGroupAddon
                 align="block-end"

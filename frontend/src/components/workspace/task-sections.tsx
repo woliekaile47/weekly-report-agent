@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { StateSnapshot, TaskEvent } from "@/api/types";
 import { fileUrl } from "@/api/client";
-import { FileInput, MetricsTable, NODES, pct, sub } from "@/components/ui";
+import { FileInput, MetricsTable, NODES, sub } from "@/components/ui";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { UserRoundCheckIcon } from "lucide-react";

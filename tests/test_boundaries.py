@@ -75,6 +75,7 @@ def test_unlisted_tool_is_denied_and_logged():
 
 
 def test_429_stops_after_one_real_request(monkeypatch, public_data):
+    monkeypatch.setenv("LLM_API_KEY", "isolated-test-placeholder")
     async def run():
         calls = []
         original = httpx.AsyncClient

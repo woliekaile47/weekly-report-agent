@@ -211,14 +211,17 @@ def build_graph(store, gateway, checkpointer, model=generate, planner=None):
         manual = s["spec"].get("news_queries", [])
         plan_key = digest({"sources": s["minutes"]["sources"], "manual": manual, "spec": [s["spec"]["year"], s["spec"]["week"]]})
         # Rework and resume reuse the same search: unchanged minutes mean no new provider calls.
-        if s.get("news", {}).get("plan_key") == plan_key:
+        cached = s.get("news", {})
+        if cached.get("plan_key") == plan_key and cached.get("status") in {"retrieved", "skipped"} and not cached.get("errors"):
             return {"route": "analyze"}
         candidates, plan_error = {"queries": []}, ""
         if planner:
             try:
                 candidates = await planner(s, store)
             except WorkflowError as exc:
-                # External checks are auxiliary: a failed plan must not block the sales report.
+                if exc.kind in {"rate_limit", "budget", "configuration"}:
+                    raise
+                # Only recoverable planning failures may degrade to no external check.
                 plan_error = str(exc)
         search = employee.get("search", {})
         screened = screen_queries(

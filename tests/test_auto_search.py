@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 from docx import Document
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -230,3 +231,31 @@ def test_template_has_required_sections_and_body_flow(tmp_path):
     documents.build_template(path)
     headings = [p.text for p in Document(path).paragraphs if p.style.name == "Heading 1"]
     assert headings == ["本周摘要", "核心指标", "品类与单品", "异常与原因", "数据质量说明", "下周关注事项", "附录：来源与审核记录"]
+
+
+@pytest.mark.parametrize("kind", ["rate_limit", "budget", "configuration"])
+def test_planning_hard_failure_pauses_without_search(kind):
+    from report_agent.models import WorkflowError
+
+    async def planner(state, store):
+        raise WorkflowError("test hard failure", kind)
+
+    update, gateway, _ = run_news(planner)
+    assert update["status"] == "paused"
+    assert update["error_kind"] == kind
+    assert update["resume_node"] == "news"
+    assert gateway.specs == []
+
+
+@pytest.mark.parametrize("status", ["unavailable", "plan_failed", "partial"])
+def test_failed_search_can_retry_on_resume(status):
+    calls = []
+
+    async def planner(state, store):
+        calls.append(1)
+        return {"queries": [query("2026 消防检查 通知")]}
+
+    first, _, _ = run_news(planner)
+    first["news"]["status"] = status
+    _, gateway, _ = run_news(planner, {"news": first["news"]})
+    assert len(calls) == 2 and len(gateway.specs) == 1

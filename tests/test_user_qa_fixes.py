@@ -90,7 +90,7 @@ def test_review_workspace_uses_word_data_quality_prose():
     notes = report_quality_notes(computed, draft)
     shown = public({**state, "metrics": computed, "draft": draft})["report_quality_notes"]
     assert shown == notes
-    assert any("剔除" in note for note in shown)
+    assert any("重复上传" in note for note in shown)
     assert any("退货" in note for note in shown)
     assert shown[-1] == "核对门店记录。"
 

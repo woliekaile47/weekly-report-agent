@@ -14,7 +14,7 @@ from report_agent.data_tools import workbook_has_catalogs
 from report_agent.documents import sha256
 from report_agent.mcp_client import Gateway
 from report_agent.model import generate
-from report_agent.models import Review, TaskSpec, WorkflowError
+from report_agent.models import ImportOptions, Review, TaskSpec, WorkflowError
 from report_agent.store import Store, atomic_json, task_path
 from report_agent.workflow import build_graph
 
@@ -52,6 +52,7 @@ class Service:
 
     def create(self, spec, files=None, import_options=None):
         spec = TaskSpec.model_validate(spec).model_dump()
+        options = ImportOptions.model_validate({} if import_options is None else import_options).model_dump()
         task_id = uuid.uuid4().hex
         inputs = {
             role: self.save_input(task_id, role, name, data) for role, (name, data) in (files or {}).items()
@@ -61,7 +62,7 @@ class Service:
             "spec": spec,
             "bundle": snapshot(),
             "inputs": inputs,
-            "import_options": import_options or {},
+            "import_options": options,
             "status": "pending",
             "route": "ingest",
             "version": 1,
@@ -108,6 +109,8 @@ class Service:
         except Timeout as exc:
             raise WorkflowError("任务正在执行，请等待当前操作完成", "transition") from exc
         try:
+            if import_options is not None:
+                import_options = ImportOptions.model_validate(import_options).model_dump()
             state = await self.state(task_id)
             if action == "run":
                 if state["status"] in {"paused", "awaiting_human", "completed"}:

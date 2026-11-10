@@ -71,6 +71,24 @@ function openTask(snapshot: StateSnapshot) {
 }
 
 describe("checkpoint rendering regression", () => {
+  it.each(["pending", "running", "approved"] as const)(
+    "offers recovery for an inactive %s checkpoint",
+    async (status) => {
+      openTask({ ...paused, status, worker_active: false });
+      await screen.findByRole("heading", { name: "缺少材料的任务" });
+      fireEvent.click(screen.getByRole("button", { name: "从检查点继续" }));
+      await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(
+        ([url, init]) => String(url).endsWith("/resume") && init?.method === "POST",
+      )).toBe(true));
+    },
+  );
+
+  it("does not offer recovery while an approved task is still executing", async () => {
+    openTask({ ...paused, status: "approved", worker_active: true });
+    await screen.findByRole("heading", { name: "缺少材料的任务" });
+    expect(screen.queryByRole("button", { name: "从检查点继续" })).toBeNull();
+  });
+
   it("renders a real missing-material checkpoint and its recovery form instead of a blank page", async () => {
     openTask(paused);
     await screen.findByRole("heading", { name: "缺少材料的任务" });

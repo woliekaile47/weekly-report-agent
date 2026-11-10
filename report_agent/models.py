@@ -24,6 +24,20 @@ class TaskSpec(BaseModel):
         return self
 
 
+class ImportOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sheet: str = Field(default="", max_length=200)
+    fields: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("fields")
+    @classmethod
+    def valid_fields(cls, values):
+        allowed = {"record_id", "date", "store_id", "store", "product_id", "product", "channel", "quantity", "amount", "cost"}
+        if set(values) - allowed or any(not v.strip() or len(v) > 200 for v in values.values()):
+            raise ValueError("字段映射须使用销售字段及非空列名（不超过200字）")
+        return values
+
+
 class Evidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_id: str

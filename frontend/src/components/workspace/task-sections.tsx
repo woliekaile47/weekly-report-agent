@@ -495,13 +495,13 @@ export function TaskOutputs({
           <h2>材料识别与口径</h2>
           {state.news && <div className="my-4 rounded border p-4">
             <h3>外部信息核对</h3><p>{state.news.message}</p>
-            {state.news.plan?.items.map((q, i) => <p key={i} className="text-sm">{q.origin === "auto" ? "自动检索" : "手动补充"}：{q.query}{q.claim && `（核实：${q.claim}）`}</p>)}
+            {state.news.plan?.items.map((q, i) => <p key={i} className="text-sm">{q.purpose === "background" ? "自动背景检索" : q.origin === "auto" ? "自动线索核验" : "手动补充"}：{q.query}{q.claim && `（${q.claim}）`}</p>)}
             {!!state.news.plan?.dropped.length && <p className="text-xs text-muted-foreground">已拦截 {state.news.plan.dropped.length} 条可能含内部信息的检索词，未发送：{state.news.plan.dropped.map(d => d.reason).join("、")}</p>}
             {state.draft?.news_assessments?.map((a,i) => <div key={i} className="my-2"><strong>{a.source_id} · 模型判断（待人工确认）：{a.verdict === "support" ? "存在支持线索" : a.verdict === "conflict" ? "存在冲突线索" : "无法核实"}</strong><p>{a.explanation}</p>{a.citations.map(c => <p key={c.source_id}>[{c.source_id}] {c.quote}</p>)}</div>)}
             <p className="text-xs">检索时间：{state.news.retrieved_at ?? "未检索"}</p>
             {state.news.sources.map(n => <article key={n.id} className="my-3 border-t pt-2">
               <a href={/^https?:\/\//.test(n.url) ? n.url : undefined} target="_blank" rel="noopener noreferrer">[{n.id}] {n.title}</a>
-              <p>{n.publisher} · {n.published_at || "发布日期不明"} · {n.time_status === "in_range" ? "检索期内" : "日期需复核"} · {n.verdict}</p>
+              <p>{n.purpose === "background" ? "行业／区域背景 · " : "纪要核验线索 · "}{n.publisher} · {n.published_at || "发布日期不明"} · {n.time_status === "in_range" ? "检索期内" : "日期需复核"} · {n.verdict}</p>
               <p className="text-sm">{n.excerpt}</p>
             </article>)}
           </div>}

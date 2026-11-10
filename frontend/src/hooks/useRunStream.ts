@@ -117,6 +117,7 @@ export function useRunStream(
         ...prev,
         status: data.status,
         trace: data.trace,
+        error: null,
         snapshot: normalizeSnapshot(data.state_snapshot),
         completedNodes: completedFromSnapshot(data.state_snapshot),
         currentNode:

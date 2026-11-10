@@ -8,6 +8,7 @@ import type { StateSnapshot, TaskEvent, TaskFile } from "@/api/types";
 import { Button } from "@/components/ui/button";
 import { StatusBadge, sub } from "@/components/ui";
 import { useRunStream } from "@/hooks/useRunStream";
+import { newsStatusLabel } from "@/lib/news-status";
 import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { WorkspaceSplit } from "@/components/workspace/workspace-split";
 import { ArtifactPanel } from "@/components/workspace/artifact-panel";
@@ -306,10 +307,18 @@ function RunWorkspace({ id }: { id: string }) {
                 active={active}
                 onOperation={operation}
               />
-              {state.status === "running" && !active && (
+              {state.news && (
+                <section className="rounded-xl border bg-card/50 px-4 py-3 text-sm leading-6" aria-label="自动新闻检索结果">
+                  <strong>自动新闻检索：{newsStatusLabel(state.news)}</strong>
+                  <p className="text-muted-foreground">{state.news.message}</p>
+                  {!!state.news.queries?.length && <p className="text-xs text-muted-foreground">关键词：{state.news.queries.join("；")} · 找到 {state.news.sources.length} 条来源</p>}
+                  <button className="text-xs underline underline-offset-4" onClick={() => setTab("materials")}>查看检索详情与来源</button>
+                </section>
+              )}
+              {state.status && ["pending", "running", "approved"].includes(state.status) && !active && (
                 <div className="notice">
-                  <strong>执行已中断，进度已保存</strong>
-                  <p>可从最近检查点继续，已完成的工具结果按缓存复用。</p>
+                  <strong>{state.status === "approved" ? "审核已通过，等待完成交付" : "执行已中断，进度已保存"}</strong>
+                  <p>{state.status === "approved" ? "继续生成正式交付包，已保存的审核决定会保留。" : "可从最近检查点继续，已完成的工具结果按缓存复用。"}</p>
                   <Button
                     onClick={() => void operation("resume", new FormData())}
                   >
@@ -341,6 +350,7 @@ function RunWorkspace({ id }: { id: string }) {
                     }
                   >
                     <GraphView
+                      news={state.news}
                       currentNode={
                         state.status === "paused"
                           ? (state.resume_node ?? null)

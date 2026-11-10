@@ -19,7 +19,7 @@ from pydantic import BaseModel, StrictInt
 
 from report_agent import access
 from report_agent.config import ROOT, connection, snapshot, validate_files
-from report_agent.models import Review, TaskSpec, WorkflowError
+from report_agent.models import ImportOptions, Review, TaskSpec, WorkflowError
 from report_agent.service import Service
 from report_agent.store import task_path
 
@@ -84,7 +84,14 @@ def start(task_id, **kwargs):
             )
             service.store.event(task_id, "worker_error", {"message": message})
 
-    tasks[task_id] = asyncio.create_task(worker())
+    task = asyncio.create_task(worker())
+    tasks[task_id] = task
+
+    def forget(completed):
+        if tasks.get(task_id) is completed:
+            tasks.pop(task_id, None)
+
+    task.add_done_callback(forget)
 
 
 async def read_uploads(**files):
@@ -122,7 +129,8 @@ async def create(
 ):
     try:
         values = await read_uploads(sales=sales, minutes=minutes, master=master)
-        task_id = service.create(TaskSpec.model_validate_json(spec), values, json.loads(import_options))
+        options = ImportOptions.model_validate_json(import_options).model_dump()
+        task_id = service.create(TaskSpec.model_validate_json(spec), values, options)
         access.claim(task_id, getattr(request.state, "owner", "local"))
         start(task_id)
         return {"id": task_id, "status": "pending"}
@@ -156,7 +164,7 @@ async def resume(
         if remove_master and master is not None:
             raise WorkflowError("不能同时移除和上传基础资料，请只选择一种操作", "materials")
         revised = TaskSpec.model_validate_json(spec).model_dump() if spec else None
-        options = json.loads(import_options) if import_options else None
+        options = ImportOptions.model_validate_json(import_options).model_dump() if import_options else None
         files = await read_uploads(sales=sales, minutes=minutes, master=master)
         start(
             task_id,
@@ -213,9 +221,15 @@ async def events(task_id: str, after: int = 0):
 @app.get("/api/runs/{task_id}/stream")
 async def stream(task_id: str, request: Request):
     await get_state(task_id)
+    try:
+        initial_cursor = int(request.headers.get("last-event-id", "0"))
+        if initial_cursor < 0:
+            raise ValueError()
+    except ValueError as exc:
+        raise HTTPException(422, "执行记录游标须为非负整数") from exc
 
     async def event_source():
-        cursor = int(request.headers.get("last-event-id", "0"))
+        cursor = initial_cursor
         state = await get_state(task_id)
         yield _sse(
             "replay",
@@ -245,6 +259,10 @@ async def stream(task_id: str, request: Request):
             state = await get_state(task_id)
             active = task_id in tasks and not tasks[task_id].done()
             if not active:
+                yield _sse(
+                    "replay",
+                    {"status": state["status"], "state_snapshot": public(state), "trace": [], "final_status": None},
+                )
                 if state["status"] == "awaiting_human":
                     yield _sse("interrupt", {"kind": "review", "version": state["version"]})
                 yield _sse("done", {"status": state["status"], "final_status": None})

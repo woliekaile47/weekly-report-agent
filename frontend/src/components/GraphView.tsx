@@ -10,11 +10,13 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useMemo } from "react";
 
-import type { GraphNodeName } from "../api/types";
+import type { GraphNodeName, StateSnapshot } from "../api/types";
+import { newsStatusLabel } from "@/lib/news-status";
 
 interface GraphViewProps {
   currentNode: GraphNodeName | null;
   completedNodes: GraphNodeName[];
+  news?: StateSnapshot["news"];
 }
 
 interface NodeData extends Record<string, unknown> {
@@ -59,7 +61,7 @@ const LAYOUT: Record<GraphNodeName, { x: number; y: number; label: string }> = {
   finalize: { x: 260, y: 512, label: "9. 交付成果" },
 };
 
-export function GraphView({ currentNode, completedNodes }: GraphViewProps) {
+export function GraphView({ currentNode, completedNodes, news }: GraphViewProps) {
   const nodes: Node[] = useMemo(
     () =>
       (Object.keys(LAYOUT) as GraphNodeName[]).map((id) => ({
@@ -67,13 +69,13 @@ export function GraphView({ currentNode, completedNodes }: GraphViewProps) {
         type: "step",
         position: { x: LAYOUT[id].x, y: LAYOUT[id].y },
         data: {
-          label: LAYOUT[id].label,
+          label: LAYOUT[id].label + (id === "news" && news ? ` · ${newsStatusLabel(news)}` : ""),
           active: currentNode === id,
           done: completedNodes.includes(id) && currentNode !== id,
         } satisfies NodeData,
         draggable: false,
       })),
-    [currentNode, completedNodes],
+    [currentNode, completedNodes, news],
   );
 
   const edgeStyle = (active: boolean) => ({

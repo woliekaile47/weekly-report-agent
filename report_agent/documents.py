@@ -472,6 +472,10 @@ def external_notes(draft, news):
     if queries:
         notes.append("检索词：" + "；".join(queries) + f"。检索范围 {news.get('start_date', '')} 至 {news.get('end_date', '')}。")
     sources = {s["id"]: s for s in news.get("sources", [])}
+    background = [s for s in sources.values() if s.get("purpose") == "background"]
+    if background:
+        notes.append("行业与区域背景（仅供参考，不证明内部经营原因）：")
+        notes.extend(f"　[{s['id']}] {s['title']}｜{s['publisher']}｜{s['published_at'] or '发布日期不明'}｜{s['url']}" for s in background)
     for item in draft.get("news_assessments", []):
         cited = [sources[c["source_id"]] for c in item.get("citations", []) if c["source_id"] in sources]
         label = VERDICTS.get(item.get("verdict"), "无法核实")

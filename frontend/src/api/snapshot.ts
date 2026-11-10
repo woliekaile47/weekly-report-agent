@@ -6,6 +6,7 @@ export function completedFromSnapshot(raw: StateSnapshot): GraphNodeName[] {
     ingest: !!s.sales,
     calculate: !!s.metrics,
     evidence: !!s.minutes?.sources?.length,
+    news: !!s.news?.status,
     analyze: !!s.draft,
     render: !!s.artifact,
     quality: s.quality?.passed === true,

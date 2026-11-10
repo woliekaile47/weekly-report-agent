@@ -14,6 +14,7 @@ import {
   ChainOfThoughtStep,
 } from "@/components/ai-elements/chain-of-thought";
 import { money, NODES, pct } from "@/components/ui";
+import { newsStatusLabel } from "@/lib/news-status";
 
 export function ExecutionProgress({ state: s }: { state: StateSnapshot }) {
   const complete: Partial<Record<GraphNodeName, boolean>> = {
@@ -115,6 +116,8 @@ export function ExecutionProgress({ state: s }: { state: StateSnapshot }) {
                     <span className="shrink-0 text-xs text-muted-foreground">
                       {paused
                         ? "已暂停"
+                        : node === "news" && s.news
+                          ? newsStatusLabel(s.news)
                         : complete[node]
                           ? "已完成"
                           : active

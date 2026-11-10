@@ -71,6 +71,12 @@ function openTask(snapshot: StateSnapshot) {
 }
 
 describe("checkpoint rendering regression", () => {
+  it("explains a skipped search outside the material tab", async () => {
+    openTask({ ...paused, news: { status: "skipped", sources: [], queries: [], message: "没有规划出检索词，未进行外部检索。" } });
+    await screen.findByText("自动新闻检索：已跳过检索");
+    expect(screen.getAllByText("没有规划出检索词，未进行外部检索。").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "查看检索详情与来源" })).toBeTruthy();
+  });
   it.each(["pending", "running", "approved"] as const)(
     "offers recovery for an inactive %s checkpoint",
     async (status) => {

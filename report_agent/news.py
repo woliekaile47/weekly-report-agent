@@ -50,6 +50,23 @@ def attendee_names(sources):
     return names
 
 
+def public_notice_queries(minutes, spec):
+    """Recover explicit regulatory inspection leads without sending internal source text."""
+    items = []
+    for source in minutes["sources"]:
+        text = source["text"]
+        # Both a public authority and a concrete inspection must be mentioned.
+        authority = next((name for name in ("市场监管", "消防救援", "应急管理") if name in text), None)
+        event = next((name for name in ("消防检查", "食品安全检查", "安全生产检查") if name in text), None)
+        if not authority or not event:
+            continue
+        month = re.search(r"(?<!\d)(1[0-2]|[1-9])\s*月", text)
+        period = str(spec["year"]) + (f"年{month[1]}月" if month else "年")
+        items.append({"query": f"{period} {authority} {event} 通知", "source_id": source["id"],
+                      "claim": f"查找{authority}{event}公开通知，具体地域和适用主体待核实"})
+    return items[:3]
+
+
 def screen_queries(plan, minutes, metrics, blocked_terms=(), manual=(), limit=3):
     """Program gate for model-written queries: internal names and figures never reach the search provider."""
     sources = {s["id"]: s["text"] for s in minutes["sources"]}

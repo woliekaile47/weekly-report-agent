@@ -20,7 +20,7 @@ from report_agent.data_tools import change_exceeds
 from report_agent.documents import sha256
 from report_agent.model import generate, ground_dates, plan_queries
 from report_agent.models import Review, WorkflowError
-from report_agent.news import screen_queries
+from report_agent.news import public_notice_queries, screen_queries
 from report_agent.rework import changed_inputs, merge_revision, plan_rework, register_review, verify_revisions
 from report_agent.store import atomic_json, digest, task_path
 
@@ -209,7 +209,7 @@ def build_graph(store, gateway, checkpointer, model=generate, planner=None):
             store.event(s["task_id"], "news_retrieved", {"status": result["status"], "count": 0})
             return {"news": result, "route": "analyze"}
         manual = s["spec"].get("news_queries", [])
-        plan_key = digest({"sources": s["minutes"]["sources"], "manual": manual, "spec": [s["spec"]["year"], s["spec"]["week"]]})
+        plan_key = digest({"policy": "public-notice-v1", "sources": s["minutes"]["sources"], "manual": manual, "spec": [s["spec"]["year"], s["spec"]["week"]]})
         # Rework and resume reuse the same search: unchanged minutes mean no new provider calls.
         cached = s.get("news", {})
         if cached.get("plan_key") == plan_key and cached.get("status") in {"retrieved", "skipped"} and not cached.get("errors"):
@@ -224,6 +224,8 @@ def build_graph(store, gateway, checkpointer, model=generate, planner=None):
                 # Only recoverable planning failures may degrade to no external check.
                 plan_error = str(exc)
         search = employee.get("search", {})
+        if planner and not plan_error and not candidates.get("queries"):
+            candidates = {"queries": public_notice_queries(s["minutes"], s["spec"])}
         screened = screen_queries(
             candidates, s["minutes"], s["metrics"], search.get("blocked_terms", []), manual, search.get("max_queries", 3)
         )

@@ -199,6 +199,37 @@ def test_news_node_searches_only_screened_queries():
     assert any(kind == "search_planned" for kind, _ in events)
 
 
+def test_empty_plan_recovers_explicit_public_notice_without_internal_text():
+    async def planner(state, store):
+        return {"queries": []}
+
+    update, gateway, _ = run_news(planner)
+    assert gateway.specs[0]["news_queries"] == ["2026年11月 市场监管 消防检查 通知"]
+    assert update["news"]["plan"]["items"][0]["source_id"] == "M004"
+    assert "青禾" not in gateway.specs[0]["news_queries"][0]
+
+
+def test_empty_plan_does_not_search_internal_operational_notes():
+    async def planner(state, store):
+        return {"queries": []}
+
+    update, gateway, _ = run_news(planner, {"minutes": {"sources": [
+        {"id": "M001", "text": "杭州湖滨店停业，店内消防检查已完成。"},
+    ]}})
+    assert gateway.specs[0]["news_queries"] == []
+
+
+def test_public_notice_fallback_still_passes_privacy_screen():
+    async def planner(state, store):
+        return {"queries": []}
+
+    update, gateway, _ = run_news(planner, {"metrics": {"groups": [
+        {"dimension": "store", "label": "市场监管"},
+    ]}})
+    assert gateway.specs[0]["news_queries"] == []
+    assert len(update["news"]["plan"]["dropped"]) == 1
+
+
 def test_plan_failure_does_not_block_report():
     from report_agent.models import WorkflowError
 

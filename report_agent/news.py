@@ -28,6 +28,8 @@ def validate_assessments(draft, state):
             source = news.get(citation["source_id"])
             if not source or citation["quote"] not in source["excerpt"]:
                 raise WorkflowError("新闻引用不存在或摘录不匹配", "model")
+            if item["verdict"] != "unverified" and source.get("purpose") == "background":
+                raise WorkflowError("行业背景资料不能作为纪要已获支持或存在冲突的证据", "model")
             if item["verdict"] != "unverified" and source["time_status"] != "in_range":
                 raise WorkflowError("新闻日期不明或超出范围，只能标记无法核实", "model")
 
@@ -67,7 +69,17 @@ def public_notice_queries(minutes, spec):
     return items[:3]
 
 
-def screen_queries(plan, minutes, metrics, blocked_terms=(), manual=(), limit=3):
+def background_queries(spec, metrics, terms="烘焙 咖啡 消费市场"):
+    """Use only a public region name and generic sector terms, never store details or figures."""
+    regions = [g for g in metrics.get("groups", []) if g.get("dimension") == "region"
+               and g.get("label") in {"华东", "华南", "华北", "华中", "西南", "西北", "东北", "全国"}]
+    region = max(regions, key=lambda g: abs(g.get("change") or 0))["label"] if regions else "全国"
+    start = date.fromisocalendar(spec["year"], spec["week"], 1)
+    return [{"query": f"{start.year}年{start.month}月 {region} {terms} 行业动态", "source_id": "",
+             "claim": "行业与区域背景参考，不用于证明内部销售变化"}]
+
+
+def screen_queries(plan, minutes, metrics, blocked_terms=(), manual=(), limit=3, background=()):
     """Program gate for model-written queries: internal names and figures never reach the search provider."""
     sources = {s["id"]: s["text"] for s in minutes["sources"]}
     stores = [g["label"] for g in metrics["groups"] if g["dimension"] == "store"]
@@ -75,9 +87,11 @@ def screen_queries(plan, minutes, metrics, blocked_terms=(), manual=(), limit=3)
     names = attendee_names(minutes["sources"])
     items = [{"query": q.strip(), "source_id": "", "claim": "", "origin": "manual"} for q in manual if q.strip()]
     dropped = []
-    for item in plan.get("queries", []):
+    candidates = [(item, "verification") for item in plan.get("queries", [])]
+    candidates += [(item, "background") for item in background]
+    for item, purpose in candidates:
         query = item["query"].strip()
-        if item["source_id"] not in sources:
+        if purpose != "background" and item["source_id"] not in sources:
             reason = "引用了不存在的纪要编号"
         elif any(term and term in query for term in terms):
             reason = "包含门店或配置的内部词"
@@ -86,10 +100,12 @@ def screen_queries(plan, minutes, metrics, blocked_terms=(), manual=(), limit=3)
         elif re.search(r"\d[\d,.]*\s*(?:元|万|%|％|笔|份)|\b[A-Z]{1,3}\d{2,}\b", query):
             reason = "包含金额、比例或内部编码"
         else:
-            items.append({**item, "query": query, "origin": "auto"})
+            items.append({**item, "query": query, "origin": "auto", "purpose": purpose})
             continue
         dropped.append({"source_id": item["source_id"], "reason": reason})
-    unique = list({item["query"]: item for item in items}.values())[:limit]
+    unique = list({item["query"]: item for item in items}.values())
+    context = [item for item in unique if item.get("purpose") == "background"][:1]
+    unique = [item for item in unique if item.get("purpose") != "background"][:max(0, limit - len(context))] + context
     return {"queries": [item["query"] for item in unique], "items": unique, "dropped": dropped}
 
 
@@ -110,7 +126,7 @@ def search_news(spec):
     end = start + timedelta(days=6)
     result = {
         "status": "skipped",
-        "message": "本周纪要没有可对外核实的公开事项，未进行外部检索。",
+        "message": "自动识别未生成可安全发送的公开检索词，本次未检索；这不代表纪要中一定没有公开线索。",
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
         "start_date": str(start - timedelta(days=30)),
         "end_date": str(end),
@@ -196,6 +212,7 @@ def search_news(spec):
                     result["sources"].append(
                         {
                             "id": f"N{len(seen):03}",
+                            "purpose": spec.get("news_query_purposes", {}).get(query, "verification"),
                             "query": query,
                             "title": str(row.get("title", ""))[:300],
                             "url": url,

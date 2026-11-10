@@ -70,10 +70,10 @@ export interface AnomalyGroup {
   }[];
 }
 export interface StateSnapshot {
-  news?: { status: string; message: string; retrieved_at?: string; queries?: string[]; plan?: { items: { query: string; claim: string; origin: string }[]; dropped: { source_id: string; reason: string }[] }; sources: {id: string; title: string; url: string; publisher: string; published_at: string; time_status: string; excerpt: string; verdict: string}[] };
+  news?: { status: string; message: string; retrieved_at?: string; queries?: string[]; plan?: { items: { query: string; claim: string; origin: string; purpose?: string }[]; dropped: { source_id: string; reason: string }[] }; sources: {id: string; title: string; url: string; publisher: string; published_at: string; time_status: string; excerpt: string; verdict: string; purpose?: string}[] };
   task_id?: string;
   status?: RunStatus;
-  spec?: { title: string; year: number; week: number; focus: string };
+  spec?: { title: string; year: number; week: number; focus: string; search_enabled?: boolean };
   inputs?: { sales?: string; minutes?: string; master?: string | null };
   version?: number;
   current_node?: GraphNodeName;

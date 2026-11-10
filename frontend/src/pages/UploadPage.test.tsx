@@ -19,6 +19,19 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
+it.each([true, false])("saves the user search switch choice %s", async (enabled) => {
+  const user = openForm();
+  const toggle = screen.getByRole("switch", { name: "启用新闻与行业背景检索" });
+  expect((toggle as HTMLInputElement).checked).toBe(true);
+  if (!enabled) await user.click(toggle);
+  expect((toggle as HTMLInputElement).checked).toBe(enabled);
+  fireEvent.submit(screen.getByRole("button", { name: "发起任务" }).closest("form")!);
+  await screen.findByText("任务已提交");
+  const call = vi.mocked(request).mock.calls.find(([path]) => path === "/runs");
+  const body = call?.[1]?.body as FormData;
+  expect(JSON.parse(String(body.get("spec"))).search_enabled).toBe(enabled);
+});
+
 function openForm() {
   vi.mocked(request).mockImplementation(async (path) =>
     path === "/config"

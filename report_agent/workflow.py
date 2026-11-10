@@ -20,7 +20,7 @@ from report_agent.data_tools import change_exceeds
 from report_agent.documents import sha256
 from report_agent.model import generate, ground_dates, plan_queries
 from report_agent.models import Review, WorkflowError
-from report_agent.news import public_notice_queries, screen_queries
+from report_agent.news import background_queries, public_notice_queries, screen_queries
 from report_agent.rework import changed_inputs, merge_revision, plan_rework, register_review, verify_revisions
 from report_agent.store import atomic_json, digest, task_path
 
@@ -204,12 +204,16 @@ def build_graph(store, gateway, checkpointer, model=generate, planner=None):
 
     async def news(s):
         employee = s["bundle"]["employee"]
+        if not s["spec"].get("search_enabled", True):
+            result = {"status": "disabled", "message": "本任务已关闭新闻与行业背景检索，未生成检索词，也未调用搜索服务。", "sources": [], "queries": []}
+            store.event(s["task_id"], "news_retrieved", {"status": "disabled", "count": 0})
+            return {"news": result, "route": "analyze"}
         if "search_news" not in employee["allowed_tools"]:
             result = {"status": "skipped", "message": "此任务旧配置未启用新闻工具，未进行外部核验", "sources": []}
             store.event(s["task_id"], "news_retrieved", {"status": result["status"], "count": 0})
             return {"news": result, "route": "analyze"}
         manual = s["spec"].get("news_queries", [])
-        plan_key = digest({"policy": "public-notice-v1", "sources": s["minutes"]["sources"], "manual": manual, "spec": [s["spec"]["year"], s["spec"]["week"]]})
+        plan_key = digest({"policy": "background-and-claims-v2", "sources": s["minutes"]["sources"], "manual": manual, "spec": [s["spec"]["year"], s["spec"]["week"]]})
         # Rework and resume reuse the same search: unchanged minutes mean no new provider calls.
         cached = s.get("news", {})
         if cached.get("plan_key") == plan_key and cached.get("status") in {"retrieved", "skipped"} and not cached.get("errors"):
@@ -227,13 +231,21 @@ def build_graph(store, gateway, checkpointer, model=generate, planner=None):
         if planner and not plan_error and not candidates.get("queries"):
             candidates = {"queries": public_notice_queries(s["minutes"], s["spec"])}
         screened = screen_queries(
-            candidates, s["minutes"], s["metrics"], search.get("blocked_terms", []), manual, search.get("max_queries", 3)
+            candidates, s["minutes"], s["metrics"], search.get("blocked_terms", []), manual,
+            max(1, min(3, search.get("max_queries", 3))),
+            background=background_queries(s["spec"], s["metrics"]),
         )
         store.event(s["task_id"], "search_planned", {**screened, "error": plan_error})
-        result = await gateway.call("search_news", {"spec": {**s["spec"], "news_queries": screened["queries"]}})
+        result = await gateway.call("search_news", {"spec": {
+            **s["spec"], "news_queries": screened["queries"],
+            "news_query_purposes": {item["query"]: item.get("purpose", "verification") for item in screened["items"]},
+        }})
         if plan_error and not screened["queries"]:
             result["status"] = "plan_failed"
             result["message"] = "未能自动生成检索词，本周未做外部核对；销售分析不受影响。原因：" + plan_error
+        elif plan_error:
+            result["message"] = "纪要公开线索规划失败，本次仅检索行业与区域背景。" + result.get("message", "")
+            result["planning_error"] = plan_error
         result = {**result, "plan": screened, "plan_key": plan_key}
         store.event(s["task_id"], "news_retrieved", {"status": result["status"], "count": len(result["sources"])})
         return {"news": result, "route": "analyze"}

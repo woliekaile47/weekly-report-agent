@@ -193,7 +193,8 @@ def test_news_node_searches_only_screened_queries():
         return {"queries": [query("2026 消防检查 通知"), query("青禾 活动")]}
 
     update, gateway, events = run_news(planner)
-    assert gateway.specs[0]["news_queries"] == ["2026 消防检查 通知"]
+    assert gateway.specs[0]["news_queries"][0] == "2026 消防检查 通知"
+    assert "消费市场" in gateway.specs[0]["news_queries"][-1]
     assert update["news"]["plan"]["dropped"][0]["reason"] == "包含门店或配置的内部词"
     assert update["route"] == "analyze"
     assert any(kind == "search_planned" for kind, _ in events)
@@ -204,19 +205,21 @@ def test_empty_plan_recovers_explicit_public_notice_without_internal_text():
         return {"queries": []}
 
     update, gateway, _ = run_news(planner)
-    assert gateway.specs[0]["news_queries"] == ["2026年11月 市场监管 消防检查 通知"]
+    assert gateway.specs[0]["news_queries"][0] == "2026年11月 市场监管 消防检查 通知"
     assert update["news"]["plan"]["items"][0]["source_id"] == "M004"
     assert "青禾" not in gateway.specs[0]["news_queries"][0]
 
 
-def test_empty_plan_does_not_search_internal_operational_notes():
+def test_internal_operational_notes_only_trigger_background_search():
     async def planner(state, store):
         return {"queries": []}
 
     update, gateway, _ = run_news(planner, {"minutes": {"sources": [
         {"id": "M001", "text": "杭州湖滨店停业，店内消防检查已完成。"},
     ]}})
-    assert gateway.specs[0]["news_queries"] == []
+    assert len(gateway.specs[0]["news_queries"]) == 1
+    assert update["news"]["plan"]["items"][0]["purpose"] == "background"
+    assert "湖滨" not in gateway.specs[0]["news_queries"][0]
 
 
 def test_public_notice_fallback_still_passes_privacy_screen():
@@ -226,7 +229,8 @@ def test_public_notice_fallback_still_passes_privacy_screen():
     update, gateway, _ = run_news(planner, {"metrics": {"groups": [
         {"dimension": "store", "label": "市场监管"},
     ]}})
-    assert gateway.specs[0]["news_queries"] == []
+    assert len(gateway.specs[0]["news_queries"]) == 1
+    assert update["news"]["plan"]["items"][0]["purpose"] == "background"
     assert len(update["news"]["plan"]["dropped"]) == 1
 
 
@@ -239,8 +243,72 @@ def test_plan_failure_does_not_block_report():
     update, gateway, _ = run_news(planner)
     assert update.get("status") != "paused"
     assert update["route"] == "analyze"
-    assert update["news"]["status"] == "plan_failed"
-    assert gateway.specs[0]["news_queries"] == []
+    assert update["news"]["planning_error"]
+    assert len(gateway.specs[0]["news_queries"]) == 1
+    assert "仅检索行业与区域背景" in update["news"]["message"]
+
+
+def test_search_switch_skips_both_planner_and_provider():
+    async def forbidden(state, store):
+        pytest.fail("Disabled searches must not call the planner")
+
+    update, gateway, _ = run_news(forbidden, {"spec": {"year": 2026, "week": 43, "search_enabled": False}})
+    assert update["news"]["status"] == "disabled"
+    assert gateway.specs == []
+
+
+def test_background_slot_survives_three_manual_queries():
+    async def planner(state, store):
+        return {"queries": [query("2026 消防检查 通知")]}
+
+    update, gateway, _ = run_news(planner, {"spec": {"year": 2026, "week": 43, "news_queries": ["公开A", "公开B", "公开C"]}})
+    assert len(gateway.specs[0]["news_queries"]) == 3
+    assert gateway.specs[0]["news_queries"][:2] == ["公开A", "公开B"]
+    assert update["news"]["plan"]["items"][-1]["purpose"] == "background"
+
+
+def test_background_cannot_prove_minutes_claim():
+    from report_agent.models import WorkflowError
+    from report_agent.news import validate_assessments
+
+    state = {"minutes": MINUTES, "news": {"sources": [{
+        "id": "N001", "excerpt": "行业背景", "purpose": "background", "time_status": "in_range",
+    }]}}
+    draft = {"news_assessments": [{"source_id": "M004", "verdict": "support", "citations": [{"source_id": "N001", "quote": "行业背景"}]}]}
+    with pytest.raises(WorkflowError, match="行业背景"):
+        validate_assessments(draft, state)
+
+
+def test_background_sources_are_labelled_in_report_appendix():
+    notes = documents.external_notes({"news_assessments": []}, {"sources": [{
+        "id": "N001", "purpose": "background", "title": "行业公开资讯", "publisher": "example.com",
+        "published_at": "2026-10-20", "url": "https://example.com/background",
+    }]})
+    assert any("行业与区域背景（仅供参考" in note for note in notes)
+    assert any("https://example.com/background" in note for note in notes)
+
+
+def test_draft_prompt_separates_minutes_and_news_ids_and_explains_retry(monkeypatch):
+    captured = {}
+
+    async def chat(state, store, system, user_content):
+        captured.update(system=system, payload=json.loads(user_content))
+        return json.dumps({"summary": "经营摘要", "anomalies": [], "actions": ["复核经营材料"]}), {}
+
+    class Store:
+        def event(self, *args):
+            pass
+
+    monkeypatch.setattr(model, "_chat", chat)
+    state = {"task_id": "test", "spec": {"year": 2026, "week": 43},
+             "minutes": {"sources": [{"id": "M007", "text": "内部材料"}]},
+             "metrics": {"tokens": {}, "groups": []}, "reason": "新闻核验引用了不存在的纪要编号",
+             "bundle": {"skill": "岗位", "employee": {"quality": {}}}}
+    asyncio.run(model.generate(state, Store()))
+    assert captured["payload"]["allowed_minutes_ids"] == ["M007"]
+    assert captured["payload"]["previous_validation_error"] == state["reason"]
+    schema = json.loads(captured["system"].split("必须只输出符合以下Schema的JSON：\n", 1)[1])
+    assert schema["$defs"]["NewsAssessment"]["properties"]["source_id"]["enum"] == ["M007"]
 
 
 def test_unchanged_minutes_reuse_previous_search():

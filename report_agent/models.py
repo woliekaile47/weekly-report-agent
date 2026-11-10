@@ -10,6 +10,7 @@ class TaskSpec(BaseModel):
     week: int = Field(default=44, ge=1, le=53)
     focus: str = Field(default="", max_length=2000)
     news_queries: list[str] = Field(default_factory=list, max_length=3)
+    search_enabled: bool = True
 
     @field_validator("news_queries")
     @classmethod

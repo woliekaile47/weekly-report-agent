@@ -44,6 +44,7 @@ export function UploadPage() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [searchEnabled, setSearchEnabled] = useState(true);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
@@ -56,7 +57,8 @@ export function UploadPage() {
         year: Number(data.get("year")),
         week: Number(data.get("week")),
         focus: data.get("focus"),
-        news_queries: String(data.get("news_queries") ?? "").split("\n").map(q => q.trim()).filter(Boolean),
+        search_enabled: searchEnabled,
+        news_queries: searchEnabled ? String(data.get("news_queries") ?? "").split("\n").map(q => q.trim()).filter(Boolean) : [],
       }),
     );
     for (const k of ["sales", "minutes", "master"]) {
@@ -141,10 +143,10 @@ export function UploadPage() {
                 placeholder="这周需要重点关注哪些区域、门店或经营问题？（可选）"
                 className="min-h-26 border-0 px-4 py-4 text-sm"
               />
-              <label className="px-4 text-sm">补充检索关键词（可选，每行一条）
+              {searchEnabled && <details className="w-full px-4 text-left text-sm"><summary className="cursor-pointer text-xs text-muted-foreground">补充检索关键词（可选）</summary><label>每行一条
                 <textarea name="news_queries" aria-label="补充检索关键词" rows={2} className="mt-2 w-full rounded border p-2" placeholder="一般不用填，例如：上海 咖啡 消费市场" />
-                <span className="text-xs text-muted-foreground">系统会从纪要中自动找出可对外核实的事项并检索，每个任务最多3条。只有检索词会发给搜索服务，含门店名、人名或金额的自动检索词会被拦截。</span>
-              </label>
+                <span className="text-xs text-muted-foreground">每个任务合计最多3条查询，其中保留1条行业背景查询。只有关键词会发给搜索服务，自动关键词中的门店名、人名或金额会被拦截。</span>
+              </label></details>}
               <InputGroupAddon
                 align="block-end"
                 className="flex-col items-stretch gap-4 px-4 pb-4"
@@ -193,6 +195,15 @@ export function UploadPage() {
                     </span>
                     <ChevronDownIcon className="size-3" />
                   </Button>
+                  <div className="ml-auto flex shrink-0 items-center gap-3">
+                    <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-xs" title="启用后自动检索行业与区域背景，同时核验纪要公开线索" onClick={(event) => event.stopPropagation()}>
+                      <span className="relative inline-flex h-5 w-9 shrink-0">
+                        <input className="peer sr-only" type="checkbox" role="switch" aria-label="启用新闻与行业背景检索" checked={searchEnabled} onChange={(event) => setSearchEnabled(event.target.checked)} />
+                        <span aria-hidden="true" className="h-5 w-9 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2" />
+                        <span aria-hidden="true" className="pointer-events-none absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-4" />
+                      </span>
+                      <span>联网检索</span>
+                    </label>
                   <Button
                     type="submit"
                     className="h-9 rounded-full px-4"
@@ -205,7 +216,9 @@ export function UploadPage() {
                     )}
                     <span>{busy ? "正在提交…" : "发起任务"}</span>
                   </Button>
+                  </div>
                 </div>
+                <p className="-mt-2 text-right text-[11px] leading-5 text-muted-foreground">{searchEnabled ? "已开启：自动检索行业背景和纪要公开线索，无需填写关键词。" : "已关闭：本任务不生成检索词，也不调用搜索服务。"}</p>
               </InputGroupAddon>
             </InputGroup>
             {error && (
